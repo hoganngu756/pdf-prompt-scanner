@@ -6,8 +6,12 @@ public class ScanResponse {
     private HeuristicResult heuristicResult;
     private LlmResult llmResult;
     private String error;
+    private String previewImageBase64;
 
     public ScanResponse() {}
+
+    public String getPreviewImageBase64() { return previewImageBase64; }
+    public void setPreviewImageBase64(String previewImageBase64) { this.previewImageBase64 = previewImageBase64; }
 
     public HeuristicResult getHeuristicResult() { return heuristicResult; }
     public void setHeuristicResult(HeuristicResult heuristicResult) { this.heuristicResult = heuristicResult; }

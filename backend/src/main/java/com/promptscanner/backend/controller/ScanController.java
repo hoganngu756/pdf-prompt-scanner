@@ -2,11 +2,11 @@ package com.promptscanner.backend.controller;
 
 import com.promptscanner.backend.dto.ScanResponse;
 import com.promptscanner.backend.service.PdfScannerService;
+import com.promptscanner.backend.service.HeuristicScannerService;
+import com.promptscanner.backend.service.LlmScannerService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api")
@@ -14,9 +14,15 @@ import java.util.List;
 public class ScanController {
 
     private final PdfScannerService pdfScannerService;
+    private final HeuristicScannerService heuristicScannerService;
+    private final LlmScannerService llmScannerService;
 
-    public ScanController(PdfScannerService pdfScannerService) {
+    public ScanController(PdfScannerService pdfScannerService, 
+                          HeuristicScannerService heuristicScannerService,
+                          LlmScannerService llmScannerService) {
         this.pdfScannerService = pdfScannerService;
+        this.heuristicScannerService = heuristicScannerService;
+        this.llmScannerService = llmScannerService;
     }
 
     @PostMapping("/scan")
@@ -36,29 +42,24 @@ public class ScanController {
             String fileName = file.getOriginalFilename();
             System.out.println("Received file: " + fileName + " | Size: " + file.getSize());
 
-            // PHASE 2: Extract text using PDFBox
-            String extractedText = pdfScannerService.extractText(file);
+            // Extract text and render preview using PDFBox
+            PdfScannerService.PdfData pdfData = pdfScannerService.processPdf(file);
+            String extractedText = pdfData.extractedText;
+            response.setPreviewImageBase64(pdfData.previewImageBase64);
+            
             System.out.println("--- Extracted Text Preview ---");
             System.out.println(extractedText.substring(0, Math.min(extractedText.length(), 200)) + "...");
             System.out.println("------------------------------");
 
-            // Mocked Heuristic Scan
+            // Heuristic Scan
             if (useHeuristics) {
-                // In Phase 3, we'll replace this with real regex logic against the extracted text.
-                ScanResponse.HeuristicResult hResult = new ScanResponse.HeuristicResult(
-                        true, 
-                        List.of()
-                );
+                ScanResponse.HeuristicResult hResult = heuristicScannerService.scan(extractedText);
                 response.setHeuristicResult(hResult);
             }
 
-            // Mocked LLM Scan
+            // LLM Scan
             if (useLLM) {
-                // In Phase 3, we'll call an LLM API here.
-                ScanResponse.LlmResult lResult = new ScanResponse.LlmResult(
-                        true, 
-                        "No prompt injection detected. (Mock LLM response)"
-                );
+                ScanResponse.LlmResult lResult = llmScannerService.scan(extractedText);
                 response.setLlmResult(lResult);
             }
 

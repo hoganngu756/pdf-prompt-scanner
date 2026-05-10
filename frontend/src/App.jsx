@@ -99,6 +99,16 @@ function App() {
             </div>
           ) : (
             <>
+              {results.previewImageBase64 && (
+                <div className="preview-container" style={{ textAlign: 'center', marginBottom: '20px' }}>
+                  <h3>Highlighted PDF Preview</h3>
+                  <img 
+                    src={results.previewImageBase64} 
+                    alt="PDF Preview" 
+                    style={{ maxWidth: '100%', border: '1px solid #475569', borderRadius: '8px' }} 
+                  />
+                </div>
+              )}
               {results.heuristicResult && (
                 <div className={`result-item ${results.heuristicResult.safe ? 'safe' : 'danger'}`}>
                   <h3>Heuristic Scan: {results.heuristicResult.safe ? 'Safe' : 'Suspicious'}</h3>

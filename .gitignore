@@ -9,3 +9,7 @@ frontend/dist/
 
 # OS
 .DS_Store
+
+# Secrets
+backend/src/main/resources/application-secrets.properties
+backend/application-secrets.properties
