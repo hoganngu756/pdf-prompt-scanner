@@ -1,0 +1,11 @@
+# Java / Maven
+backend/target/
+backend/*.pdf
+backend/.mvn/wrapper/maven-wrapper.jar
+
+# Node / React
+frontend/node_modules/
+frontend/dist/
+
+# OS
+.DS_Store
