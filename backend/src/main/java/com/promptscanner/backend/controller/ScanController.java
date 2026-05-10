@@ -1,6 +1,7 @@
 package com.promptscanner.backend.controller;
 
 import com.promptscanner.backend.dto.ScanResponse;
+import com.promptscanner.backend.service.PdfScannerService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -11,6 +12,12 @@ import java.util.List;
 @RequestMapping("/api")
 @CrossOrigin(origins = "http://localhost:5173") // Vite default port
 public class ScanController {
+
+    private final PdfScannerService pdfScannerService;
+
+    public ScanController(PdfScannerService pdfScannerService) {
+        this.pdfScannerService = pdfScannerService;
+    }
 
     @PostMapping("/scan")
     public ResponseEntity<ScanResponse> scanPdf(
@@ -26,10 +33,14 @@ public class ScanController {
         }
 
         try {
-            // PHASE 1: Stub implementation.
-            // In Phase 2, we will use PDFBox to extract text here.
             String fileName = file.getOriginalFilename();
             System.out.println("Received file: " + fileName + " | Size: " + file.getSize());
+
+            // PHASE 2: Extract text using PDFBox
+            String extractedText = pdfScannerService.extractText(file);
+            System.out.println("--- Extracted Text Preview ---");
+            System.out.println(extractedText.substring(0, Math.min(extractedText.length(), 200)) + "...");
+            System.out.println("------------------------------");
 
             // Mocked Heuristic Scan
             if (useHeuristics) {
