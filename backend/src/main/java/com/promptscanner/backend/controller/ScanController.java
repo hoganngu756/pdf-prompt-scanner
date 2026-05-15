@@ -45,7 +45,7 @@ public class ScanController {
             // Extract text and render preview using PDFBox
             PdfScannerService.PdfData pdfData = pdfScannerService.processPdf(file);
             String extractedText = pdfData.extractedText;
-            response.setPreviewImageBase64(pdfData.previewImageBase64);
+            response.setPreviewImagesBase64(pdfData.previewImagesBase64);
             
             System.out.println("--- Extracted Text Preview ---");
             System.out.println(extractedText.substring(0, Math.min(extractedText.length(), 200)) + "...");
