@@ -51,6 +51,15 @@ public class ScanController {
             return ResponseEntity.badRequest().body(response);
         }
 
+        // Security: Validate file type
+        String contentType = file.getContentType();
+        String originalName = file.getOriginalFilename();
+        if (contentType == null || !contentType.equals("application/pdf") || 
+            originalName == null || !originalName.toLowerCase().endsWith(".pdf")) {
+            response.setError("Invalid file type. Only PDF files are accepted.");
+            return ResponseEntity.badRequest().body(response);
+        }
+
         try {
             String fileName = file.getOriginalFilename();
             System.out.println("Received file: " + fileName + " | Size: " + file.getSize());
