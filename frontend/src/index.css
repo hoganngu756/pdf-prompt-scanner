@@ -272,3 +272,25 @@ header h1 {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+.tab-btn {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  transition: all 0.2s;
+}
+
+.tab-btn:hover {
+  background-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.tab-btn.active {
+  background-color: var(--accent-color);
+  color: white;
+}

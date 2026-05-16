@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import './index.css'
 
 function App() {
@@ -7,6 +7,24 @@ function App() {
   const [useHeuristics, setUseHeuristics] = useState(true)
   const [results, setResults] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [activeTab, setActiveTab] = useState('scan')
+  const [history, setHistory] = useState([])
+
+  const fetchHistory = async () => {
+    try {
+      const res = await fetch('http://localhost:8080/api/history')
+      const data = await res.json()
+      setHistory(data)
+    } catch (err) {
+      console.error('Failed to fetch history:', err)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'history') {
+      fetchHistory()
+    }
+  }, [activeTab])
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -42,14 +60,27 @@ function App() {
 
   return (
     <div className="app-container">
-      <header>
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color: 'var(--accent-color)'}}>
-          <path d="M21.2 15c.7-1.2 1-2.5.7-3.9-.6-2-2.4-3.5-4.4-3.5h-1.2c-.7-3-3.2-5.2-6.2-5.6-3-.3-5.9 1.3-7.3 4-1.2 2.5-1 6.5.5 8.8m8.7-1.6V21"/>
-          <path d="M16 16l-4-4-4 4"/>
-        </svg>
-        <h1>PDF Prompt Scanner</h1>
+      <header style={{justifyContent: 'space-between'}}>
+        <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color: 'var(--accent-color)'}}>
+            <path d="M21.2 15c.7-1.2 1-2.5.7-3.9-.6-2-2.4-3.5-4.4-3.5h-1.2c-.7-3-3.2-5.2-6.2-5.6-3-.3-5.9 1.3-7.3 4-1.2 2.5-1 6.5.5 8.8m8.7-1.6V21"/>
+            <path d="M16 16l-4-4-4 4"/>
+          </svg>
+          <h1>PDF Prompt Scanner</h1>
+        </div>
+        <div style={{display: 'flex', gap: '16px'}}>
+          <button 
+            className={`tab-btn ${activeTab === 'scan' ? 'active' : ''}`}
+            onClick={() => setActiveTab('scan')}
+          >Scanner</button>
+          <button 
+            className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`}
+            onClick={() => setActiveTab('history')}
+          >History</button>
+        </div>
       </header>
 
+      {activeTab === 'scan' && (
       <main className="main-content">
         {/* Left Column: Upload */}
         <section className="card upload-section">
@@ -168,7 +199,7 @@ function App() {
                     </span>
                   </div>
                   <div className="result-content">
-                    <p>{results.llmResult.reason}</p>
+                    <p>{results.llmResult.analysis}</p>
                   </div>
                 </div>
               )}
@@ -176,6 +207,45 @@ function App() {
           )}
         </section>
       </main>
+      )}
+
+      {activeTab === 'history' && (
+        <div className="card">
+          <h2 className="card-title">Scan History</h2>
+          {history.length === 0 ? (
+            <p style={{color: 'var(--text-secondary)'}}>No scans have been performed yet.</p>
+          ) : (
+            <div style={{overflowX: 'auto'}}>
+              <table style={{width: '100%', borderCollapse: 'collapse'}}>
+                <thead>
+                  <tr style={{borderBottom: '2px solid var(--border-color)', textAlign: 'left'}}>
+                    <th style={{padding: '12px'}}>Date</th>
+                    <th style={{padding: '12px'}}>File Name</th>
+                    <th style={{padding: '12px'}}>Status</th>
+                    <th style={{padding: '12px'}}>Explanation</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.map(record => (
+                    <tr key={record.id} style={{borderBottom: '1px solid var(--border-color)'}}>
+                      <td style={{padding: '12px', whiteSpace: 'nowrap'}}>{new Date(record.scanDate).toLocaleString()}</td>
+                      <td style={{padding: '12px', fontWeight: '500'}}>{record.fileName}</td>
+                      <td style={{padding: '12px'}}>
+                        <span className={`badge ${record.safe ? 'safe' : 'danger'}`}>
+                          {record.safe ? 'Secure' : 'Flagged'}
+                        </span>
+                      </td>
+                      <td style={{padding: '12px', fontSize: '0.9rem', color: 'var(--text-secondary)'}}>
+                        {record.llmExplanation || record.heuristicFlags || 'No issues found'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

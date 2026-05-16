@@ -13,3 +13,7 @@ frontend/dist/
 # Secrets
 backend/src/main/resources/application-secrets.properties
 backend/application-secrets.properties
+.env
+
+# Database
+*.db

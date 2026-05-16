@@ -1,12 +1,17 @@
 package com.promptscanner.backend.controller;
 
 import com.promptscanner.backend.dto.ScanResponse;
+import com.promptscanner.backend.entity.ScanRecord;
+import com.promptscanner.backend.repository.ScanRecordRepository;
 import com.promptscanner.backend.service.PdfScannerService;
 import com.promptscanner.backend.service.HeuristicScannerService;
 import com.promptscanner.backend.service.LlmScannerService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.time.LocalDateTime;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api")
@@ -16,13 +21,21 @@ public class ScanController {
     private final PdfScannerService pdfScannerService;
     private final HeuristicScannerService heuristicScannerService;
     private final LlmScannerService llmScannerService;
+    private final ScanRecordRepository scanRecordRepository;
 
     public ScanController(PdfScannerService pdfScannerService, 
                           HeuristicScannerService heuristicScannerService,
-                          LlmScannerService llmScannerService) {
+                          LlmScannerService llmScannerService,
+                          ScanRecordRepository scanRecordRepository) {
         this.pdfScannerService = pdfScannerService;
         this.heuristicScannerService = heuristicScannerService;
         this.llmScannerService = llmScannerService;
+        this.scanRecordRepository = scanRecordRepository;
+    }
+
+    @GetMapping("/history")
+    public ResponseEntity<List<ScanRecord>> getHistory() {
+        return ResponseEntity.ok(scanRecordRepository.findAllByOrderByScanDateDesc());
     }
 
     @PostMapping("/scan")
@@ -51,17 +64,36 @@ public class ScanController {
             System.out.println(extractedText.substring(0, Math.min(extractedText.length(), 200)) + "...");
             System.out.println("------------------------------");
 
-            // Heuristic Scan
+            boolean isOverallSafe = true;
+            String hFlagsStr = "";
+            String lExplanation = "";
+
+            // PHASE 3: Heuristic Scan
             if (useHeuristics) {
                 ScanResponse.HeuristicResult hResult = heuristicScannerService.scan(extractedText);
                 response.setHeuristicResult(hResult);
+                if (!hResult.isSafe()) {
+                    isOverallSafe = false;
+                    hFlagsStr = String.join(", ", hResult.getFlags());
+                }
             }
 
-            // LLM Scan
+            // PHASE 3: LLM Scan
             if (useLLM) {
                 ScanResponse.LlmResult lResult = llmScannerService.scan(extractedText);
                 response.setLlmResult(lResult);
+                if (!lResult.isSafe()) isOverallSafe = false;
+                lExplanation = lResult.getAnalysis();
             }
+
+            // Save to database
+            ScanRecord record = new ScanRecord();
+            record.setFileName(fileName);
+            record.setScanDate(LocalDateTime.now());
+            record.setSafe(isOverallSafe);
+            record.setHeuristicFlags(hFlagsStr);
+            record.setLlmExplanation(lExplanation);
+            scanRecordRepository.save(record);
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {
