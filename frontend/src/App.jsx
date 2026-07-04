@@ -95,6 +95,7 @@ function App() {
         <main className="main-content">
           <UploadSection 
             file={file}
+            setFile={setFile}
             handleFileChange={handleFileChange}
             useHeuristics={useHeuristics}
             setUseHeuristics={setUseHeuristics}

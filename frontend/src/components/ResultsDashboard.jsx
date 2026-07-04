@@ -1,6 +1,13 @@
-import { AlertTriangle, CheckCircle, ShieldAlert, FileSearch, Sparkles, LayoutDashboard } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { AlertTriangle, CheckCircle, ShieldAlert, FileSearch, Sparkles, LayoutDashboard, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function ResultsDashboard({ results, loading }) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  useEffect(() => {
+    setCurrentIndex(0);
+  }, [results]);
+
   return (
     <section className="card results-section">
       <h2 className="card-title">
@@ -30,15 +37,52 @@ export default function ResultsDashboard({ results, loading }) {
             <div className="preview-container">
               <div className="preview-header">
                 <h3><FileSearch size={18} /> Document Preview</h3>
-                <span style={{fontSize: '0.8rem', color: 'var(--text-secondary)'}}>
-                  {results.previewImagesBase64.length} flagged page(s) shown
+                <span style={{fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: '500'}}>
+                  Page {currentIndex + 1} of {results.previewImagesBase64.length}
                 </span>
               </div>
-              <div style={{display: 'flex', flexDirection: 'column', gap: '16px'}}>
-                {results.previewImagesBase64.map((img, idx) => (
-                  <img key={idx} src={img} alt={`PDF Preview Page ${idx + 1}`} />
-                ))}
+              
+              <div className="carousel-body">
+                {results.previewImagesBase64.length > 1 && (
+                  <button 
+                    onClick={() => setCurrentIndex(prev => (prev - 1 + results.previewImagesBase64.length) % results.previewImagesBase64.length)}
+                    className="carousel-nav-btn prev"
+                    title="Previous Page"
+                  >
+                    <ChevronLeft size={22} />
+                  </button>
+                )}
+
+                <div className="carousel-slide">
+                  <img 
+                    src={results.previewImagesBase64[currentIndex]} 
+                    alt={`PDF Preview Page ${currentIndex + 1}`} 
+                  />
+                </div>
+
+                {results.previewImagesBase64.length > 1 && (
+                  <button 
+                    onClick={() => setCurrentIndex(prev => (prev + 1) % results.previewImagesBase64.length)}
+                    className="carousel-nav-btn next"
+                    title="Next Page"
+                  >
+                    <ChevronRight size={22} />
+                  </button>
+                )}
               </div>
+
+              {results.previewImagesBase64.length > 1 && (
+                <div className="carousel-indicators">
+                  {results.previewImagesBase64.map((_, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setCurrentIndex(idx)}
+                      className={`carousel-indicator-dot ${currentIndex === idx ? 'active' : ''}`}
+                      title={`Go to page ${idx + 1}`}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

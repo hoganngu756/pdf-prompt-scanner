@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { FileUp, FileText, Settings, ShieldAlert, Cpu, ScanSearch, Loader2 } from 'lucide-react';
 
 export default function UploadSection({ 
   file, 
+  setFile,
   handleFileChange, 
   useHeuristics, 
   setUseHeuristics, 
@@ -10,6 +12,31 @@ export default function UploadSection({
   loading, 
   handleScan 
 }) {
+  const [dragActive, setDragActive] = useState(false);
+
+  const handleDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const droppedFile = e.dataTransfer.files[0];
+      if (droppedFile.type === "application/pdf" || droppedFile.name.toLowerCase().endsWith(".pdf")) {
+        setFile(droppedFile);
+      }
+    }
+  };
+
   return (
     <section className="card upload-section">
       <h2 className="card-title">
@@ -17,7 +44,14 @@ export default function UploadSection({
         Upload Document
       </h2>
       
-      <div className="file-drop-zone" onClick={() => document.getElementById('file-upload').click()}>
+      <div 
+        className={`file-drop-zone ${dragActive ? 'active' : ''}`}
+        onClick={() => document.getElementById('file-upload').click()}
+        onDragEnter={handleDrag}
+        onDragOver={handleDrag}
+        onDragLeave={handleDrag}
+        onDrop={handleDrop}
+      >
         <div className="file-drop-icon">
           {file ? <FileText size={48} /> : <FileUp size={48} />}
         </div>

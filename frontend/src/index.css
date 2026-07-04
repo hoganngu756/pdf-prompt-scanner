@@ -293,6 +293,87 @@ header h1 {
   transition: transform var(--transition-normal);
 }
 
+.carousel-body {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.carousel-nav-btn {
+  position: absolute;
+  background: var(--bg-glass);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: var(--radius-full);
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 5;
+  transition: all var(--transition-bounce);
+  box-shadow: var(--shadow-md);
+}
+
+.carousel-nav-btn.prev {
+  left: 12px;
+}
+
+.carousel-nav-btn.next {
+  right: 12px;
+}
+
+.carousel-nav-btn:hover {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+  color: #ffffff;
+  transform: scale(1.1);
+  box-shadow: var(--shadow-glow);
+}
+
+.carousel-nav-btn:active {
+  transform: scale(0.95);
+}
+
+.carousel-slide {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.carousel-indicators {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.carousel-indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  border: none;
+  background-color: var(--text-secondary);
+  cursor: pointer;
+  opacity: 0.4;
+  transition: all var(--transition-normal);
+}
+
+.carousel-indicator-dot:hover {
+  opacity: 0.8;
+}
+
+.carousel-indicator-dot.active {
+  background-color: var(--accent-color);
+  opacity: 1;
+  width: 20px;
+}
+
 .preview-header {
   display: flex;
   justify-content: space-between;
