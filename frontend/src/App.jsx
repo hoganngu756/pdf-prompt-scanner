@@ -3,7 +3,10 @@ import Header from './components/Header'
 import UploadSection from './components/UploadSection'
 import ResultsDashboard from './components/ResultsDashboard'
 import HistoryTable from './components/HistoryTable'
+import { Toaster, toast } from 'react-hot-toast'
 import './index.css'
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api'
 
 function App() {
   const [file, setFile] = useState(null)
@@ -16,11 +19,13 @@ function App() {
 
   const fetchHistory = async () => {
     try {
-      const res = await fetch('http://localhost:8080/api/history')
+      const res = await fetch(`${API_BASE_URL}/history`)
+      if (!res.ok) throw new Error('Network response was not ok')
       const data = await res.json()
       setHistory(data)
     } catch (err) {
       console.error('Failed to fetch history:', err)
+      toast.error('Failed to fetch scan history')
     }
   }
 
@@ -37,7 +42,10 @@ function App() {
   }
 
   const handleScan = async () => {
-    if (!file) return
+    if (!file) {
+      toast.error('Please select a file first')
+      return
+    }
 
     setLoading(true)
     setResults(null)
@@ -48,15 +56,22 @@ function App() {
     formData.append('useHeuristics', useHeuristics)
 
     try {
-      const response = await fetch('http://localhost:8080/api/scan', {
+      const response = await fetch(`${API_BASE_URL}/scan`, {
         method: 'POST',
         body: formData,
       })
       const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to scan document')
+      }
+      
       setResults(data)
+      toast.success('Scan completed successfully')
     } catch (error) {
       console.error('Error during scan:', error)
-      setResults({ error: 'Failed to connect to the server.' })
+      toast.error(error.message || 'Failed to connect to the server')
+      setResults({ error: error.message || 'Failed to connect to the server.' })
     } finally {
       setLoading(false)
     }
@@ -64,6 +79,16 @@ function App() {
 
   return (
     <div className="app-container">
+      <Toaster 
+        position="top-right"
+        toastOptions={{
+          style: {
+            background: 'var(--bg-secondary)',
+            color: 'var(--text-primary)',
+            border: '1px solid var(--border-color)'
+          }
+        }} 
+      />
       <Header activeTab={activeTab} setActiveTab={setActiveTab} />
 
       {activeTab === 'scan' && (

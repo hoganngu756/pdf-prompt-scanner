@@ -1,22 +1,27 @@
+import { ShieldCheck, History, ScanSearch } from 'lucide-react';
+
 export default function Header({ activeTab, setActiveTab }) {
   return (
-    <header style={{justifyContent: 'space-between'}}>
-      <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color: 'var(--accent-color)'}}>
-          <path d="M21.2 15c.7-1.2 1-2.5.7-3.9-.6-2-2.4-3.5-4.4-3.5h-1.2c-.7-3-3.2-5.2-6.2-5.6-3-.3-5.9 1.3-7.3 4-1.2 2.5-1 6.5.5 8.8m8.7-1.6V21"/>
-          <path d="M16 16l-4-4-4 4"/>
-        </svg>
+    <header>
+      <div className="header-left">
+        <ShieldCheck size={36} color="var(--accent-color)" />
         <h1>PDF Prompt Scanner</h1>
       </div>
-      <div style={{display: 'flex', gap: '16px'}}>
+      <div className="header-tabs">
         <button 
           className={`tab-btn ${activeTab === 'scan' ? 'active' : ''}`}
           onClick={() => setActiveTab('scan')}
-        >Scanner</button>
+        >
+          <ScanSearch size={18} />
+          Scanner
+        </button>
         <button 
           className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`}
           onClick={() => setActiveTab('history')}
-        >History</button>
+        >
+          <History size={18} />
+          History
+        </button>
       </div>
     </header>
   );

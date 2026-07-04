@@ -1,3 +1,5 @@
+import { FileUp, FileText, Settings, ShieldAlert, Cpu, ScanSearch, Loader2 } from 'lucide-react';
+
 export default function UploadSection({ 
   file, 
   handleFileChange, 
@@ -10,15 +12,15 @@ export default function UploadSection({
 }) {
   return (
     <section className="card upload-section">
-      <h2 className="card-title">Upload Document</h2>
+      <h2 className="card-title">
+        <FileUp size={24} color="var(--accent-color)" />
+        Upload Document
+      </h2>
       
       <div className="file-drop-zone" onClick={() => document.getElementById('file-upload').click()}>
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" style={{color: 'var(--text-secondary)'}}>
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
-          <line x1="12" y1="18" x2="12" y2="12"/>
-          <line x1="9" y1="15" x2="15" y2="15"/>
-        </svg>
+        <div className="file-drop-icon">
+          {file ? <FileText size={48} /> : <FileUp size={48} />}
+        </div>
         <h3>{file ? file.name : 'Drag & drop PDF files here'}</h3>
         <p>{file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : 'or click to browse'}</p>
         <input 
@@ -31,12 +33,17 @@ export default function UploadSection({
       </div>
 
       <div className="settings-group">
+        <h4 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: 'var(--text-secondary)' }}>
+          <Settings size={18} />
+          Scan Configurations
+        </h4>
         <label className="toggle-label">
           <input 
             type="checkbox" 
             checked={useHeuristics} 
             onChange={(e) => setUseHeuristics(e.target.checked)} 
           />
+          <ShieldAlert size={18} color={useHeuristics ? "var(--accent-color)" : "var(--text-secondary)"} />
           Heuristics Scan
         </label>
         <label className="toggle-label">
@@ -45,7 +52,8 @@ export default function UploadSection({
             checked={useLLM} 
             onChange={(e) => setUseLLM(e.target.checked)} 
           />
-          LLM Analysis
+          <Cpu size={18} color={useLLM ? "var(--accent-color)" : "var(--text-secondary)"} />
+          LLM AI Analysis
         </label>
       </div>
 
@@ -55,8 +63,10 @@ export default function UploadSection({
         disabled={!file || loading}
       >
         {loading ? (
-          <><span className="loader"></span> Scanning Document...</>
-        ) : 'Analyze Document'}
+          <><Loader2 className="animate-spin" size={20} /> Scanning Document...</>
+        ) : (
+          <><ScanSearch size={20} /> Analyze Document</>
+        )}
       </button>
     </section>
   );
