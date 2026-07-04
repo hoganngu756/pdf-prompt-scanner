@@ -13,6 +13,9 @@ import org.apache.pdfbox.text.TextPosition;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import net.sourceforge.tess4j.Tesseract;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 
 import javax.imageio.ImageIO;
 import java.awt.Color;
@@ -28,6 +31,11 @@ import java.util.Set;
 
 @Service
 public class PdfScannerService {
+
+    private static final Logger log = LoggerFactory.getLogger(PdfScannerService.class);
+
+    @Value("${ocr.tessdata.path:}")
+    private String tessDataPath;
 
     public static class PdfData {
         public String extractedText;
@@ -90,14 +98,18 @@ public class PdfScannerService {
             stripper.setSortByPosition(true);
             data.extractedText = stripper.getText(document);
 
-            // Extract images and perform OCR
             StringBuilder ocrText = new StringBuilder();
             Tesseract tesseract = new Tesseract();
-            // Try standard Homebrew paths for Mac
-            if (new java.io.File("/opt/homebrew/share/tessdata").exists()) {
-                tesseract.setDatapath("/opt/homebrew/share/tessdata");
-            } else if (new java.io.File("/usr/local/share/tessdata").exists()) {
-                tesseract.setDatapath("/usr/local/share/tessdata");
+            
+            if (tessDataPath != null && !tessDataPath.trim().isEmpty()) {
+                tesseract.setDatapath(tessDataPath);
+            } else {
+                // Fallback for local Mac development if not configured
+                if (new java.io.File("/opt/homebrew/share/tessdata").exists()) {
+                    tesseract.setDatapath("/opt/homebrew/share/tessdata");
+                } else if (new java.io.File("/usr/local/share/tessdata").exists()) {
+                    tesseract.setDatapath("/usr/local/share/tessdata");
+                }
             }
             
             for (int i = 0; i < document.getNumberOfPages(); i++) {
@@ -113,14 +125,14 @@ public class PdfScannerService {
                                 ocrText.append(result).append("\n");
                             }
                         } catch (Exception e) {
-                            System.err.println("OCR Error: " + e.getMessage());
+                            log.warn("OCR Error on image {}: {}", name.getName(), e.getMessage());
                         }
                     }
                 }
             }
 
             if (ocrText.length() > 0) {
-                System.out.println("Extracted OCR Text: " + ocrText.toString().trim());
+                log.debug("Extracted OCR Text length: {}", ocrText.length());
                 data.extractedText += "\n\n--- OCR EXTRACTED TEXT ---\n" + ocrText.toString();
                 
                 // Re-run the highlights check for the OCR text

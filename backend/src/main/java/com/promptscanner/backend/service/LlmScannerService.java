@@ -8,12 +8,16 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
 
 @Service
 public class LlmScannerService {
+
+    private static final Logger log = LoggerFactory.getLogger(LlmScannerService.class);
 
     // We'll get the API key from application.properties
     @Value("${gemini.api.key:}")
@@ -87,7 +91,7 @@ public class LlmScannerService {
             return new ScanResponse.LlmResult(false, "Failed to parse LLM response format.");
 
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("LLM API Error during scan: {}", e.getMessage(), e);
             return new ScanResponse.LlmResult(false, "LLM API Error: " + e.getMessage());
         }
     }

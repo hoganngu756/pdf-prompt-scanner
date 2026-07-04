@@ -9,6 +9,8 @@ import com.promptscanner.backend.service.LlmScannerService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -17,6 +19,8 @@ import java.util.List;
 @RequestMapping("/api")
 @CrossOrigin(origins = "http://localhost:5173") // Vite default port
 public class ScanController {
+
+    private static final Logger log = LoggerFactory.getLogger(ScanController.class);
 
     private final PdfScannerService pdfScannerService;
     private final HeuristicScannerService heuristicScannerService;
@@ -62,16 +66,16 @@ public class ScanController {
 
         try {
             String fileName = file.getOriginalFilename();
-            System.out.println("Received file: " + fileName + " | Size: " + file.getSize());
+            log.info("Received file: {} | Size: {}", fileName, file.getSize());
 
             // Extract text and render preview using PDFBox
             PdfScannerService.PdfData pdfData = pdfScannerService.processPdf(file);
             String extractedText = pdfData.extractedText;
             response.setPreviewImagesBase64(pdfData.previewImagesBase64);
             
-            System.out.println("--- Extracted Text Preview ---");
-            System.out.println(extractedText.substring(0, Math.min(extractedText.length(), 200)) + "...");
-            System.out.println("------------------------------");
+            if (log.isDebugEnabled()) {
+                log.debug("Extracted Text Preview: {}...", extractedText.substring(0, Math.min(extractedText.length(), 200)));
+            }
 
             boolean isOverallSafe = true;
             String hFlagsStr = "";
@@ -106,9 +110,7 @@ public class ScanController {
 
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            e.printStackTrace();
-            response.setError("Failed to process the PDF file: " + e.getMessage());
-            return ResponseEntity.internalServerError().body(response);
+            throw new RuntimeException("Failed to process the PDF file", e);
         }
     }
 }
