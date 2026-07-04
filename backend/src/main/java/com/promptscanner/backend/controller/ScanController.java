@@ -17,7 +17,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api")
-@CrossOrigin(origins = "http://localhost:5173") // Vite default port
+@CrossOrigin(origins = "*") // Allow frontend deployment domain
 public class ScanController {
 
     private static final Logger log = LoggerFactory.getLogger(ScanController.class);

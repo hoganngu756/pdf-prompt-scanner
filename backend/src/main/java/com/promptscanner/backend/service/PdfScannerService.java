@@ -16,6 +16,7 @@ import net.sourceforge.tess4j.Tesseract;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import jakarta.annotation.PostConstruct;
 
 import javax.imageio.ImageIO;
 import java.awt.Color;
@@ -36,6 +37,27 @@ public class PdfScannerService {
 
     @Value("${ocr.tessdata.path:}")
     private String tessDataPath;
+
+    // Use ThreadLocal to cache Tesseract instances across requests safely
+    private ThreadLocal<Tesseract> tesseractThreadLocal;
+
+    @PostConstruct
+    public void init() {
+        tesseractThreadLocal = ThreadLocal.withInitial(() -> {
+            Tesseract tesseract = new Tesseract();
+            if (tessDataPath != null && !tessDataPath.trim().isEmpty()) {
+                tesseract.setDatapath(tessDataPath);
+            } else {
+                // Fallback for local Mac development if not configured
+                if (new java.io.File("/opt/homebrew/share/tessdata").exists()) {
+                    tesseract.setDatapath("/opt/homebrew/share/tessdata");
+                } else if (new java.io.File("/usr/local/share/tessdata").exists()) {
+                    tesseract.setDatapath("/usr/local/share/tessdata");
+                }
+            }
+            return tesseract;
+        });
+    }
 
     public static class PdfData {
         public String extractedText;
@@ -99,26 +121,23 @@ public class PdfScannerService {
             data.extractedText = stripper.getText(document);
 
             StringBuilder ocrText = new StringBuilder();
-            Tesseract tesseract = new Tesseract();
+            Tesseract tesseract = tesseractThreadLocal.get();
             
-            if (tessDataPath != null && !tessDataPath.trim().isEmpty()) {
-                tesseract.setDatapath(tessDataPath);
-            } else {
-                // Fallback for local Mac development if not configured
-                if (new java.io.File("/opt/homebrew/share/tessdata").exists()) {
-                    tesseract.setDatapath("/opt/homebrew/share/tessdata");
-                } else if (new java.io.File("/usr/local/share/tessdata").exists()) {
-                    tesseract.setDatapath("/usr/local/share/tessdata");
+            int ocrImageCount = 0;
+            int maxOcrPages = Math.min(document.getNumberOfPages(), 5); // limit OCR to first 5 pages
+            for (int i = 0; i < maxOcrPages; i++) {
+                if (ocrImageCount >= 10) {
+                    log.info("Reached maximum OCR image limit (10). Skipping remaining images.");
+                    break;
                 }
-            }
-            
-            for (int i = 0; i < document.getNumberOfPages(); i++) {
                 PDPage page = document.getPage(i);
                 org.apache.pdfbox.pdmodel.PDResources resources = page.getResources();
                 if (resources != null) {
                     for (org.apache.pdfbox.cos.COSName name : resources.getXObjectNames()) {
                         try {
                             if (resources.isImageXObject(name)) {
+                                if (ocrImageCount >= 10) break;
+                                ocrImageCount++;
                                 org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject image = (org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject) resources.getXObject(name);
                                 BufferedImage bim = image.getImage();
                                 String result = tesseract.doOCR(bim);
@@ -134,14 +153,16 @@ public class PdfScannerService {
             if (ocrText.length() > 0) {
                 log.debug("Extracted OCR Text length: {}", ocrText.length());
                 data.extractedText += "\n\n--- OCR EXTRACTED TEXT ---\n" + ocrText.toString();
-                
-                // Re-run the highlights check for the OCR text
             }
 
             // Determine which pages to render (pages with highlights, or just the first page if none)
             List<Integer> pagesToRender = new ArrayList<>(highlightsPerPage.keySet());
             if (pagesToRender.isEmpty() && document.getNumberOfPages() > 0) {
                 pagesToRender.add(0); // Render first page by default so the UI isn't empty
+            }
+            if (pagesToRender.size() > 5) {
+                log.info("Limiting page rendering preview to first 5 flagged pages out of {}", pagesToRender.size());
+                pagesToRender = pagesToRender.subList(0, 5);
             }
 
             PDFRenderer pdfRenderer = new PDFRenderer(document);

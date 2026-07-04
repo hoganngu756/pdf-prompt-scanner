@@ -45,7 +45,7 @@ public class HeuristicScannerService {
             } else {
                 // Escape regex specials just in case, though our phrases are alphabetic
                 regex.append(Pattern.quote(String.valueOf(c)));
-                regex.append("[\\W_]*"); // Optional non-word characters between letters
+                regex.append("[\\W_]{0,3}"); // Limit optional non-word characters between letters to avoid ReDoS
             }
         }
         return Pattern.compile(regex.toString(), Pattern.CASE_INSENSITIVE);
