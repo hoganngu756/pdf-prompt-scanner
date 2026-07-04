@@ -102,6 +102,11 @@ export default function UploadSection({
           <><ScanSearch size={20} /> Analyze Document</>
         )}
       </button>
+
+      <div style={{ marginTop: '12px', fontSize: '0.85rem', color: 'var(--text-secondary)', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+        <span style={{ fontSize: '1rem' }}>ℹ️</span>
+        <em>Note: Backend runs on a free tier. The first scan may take up to 60s to wake up.</em>
+      </div>
     </section>
   );
 }
