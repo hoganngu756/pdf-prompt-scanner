@@ -10,16 +10,46 @@ import java.util.regex.Pattern;
 @Service
 public class HeuristicScannerService {
 
-    // Common phrases used in prompt injections or jailbreaks
-    private static final List<Pattern> SUSPICIOUS_PATTERNS = List.of(
-            Pattern.compile("ignore all previous instructions", Pattern.CASE_INSENSITIVE),
-            Pattern.compile("system message", Pattern.CASE_INSENSITIVE),
-            Pattern.compile("you are now", Pattern.CASE_INSENSITIVE),
-            Pattern.compile("system prompt", Pattern.CASE_INSENSITIVE),
-            Pattern.compile("do not follow the rules", Pattern.CASE_INSENSITIVE),
-            Pattern.compile("forget everything", Pattern.CASE_INSENSITIVE),
-            Pattern.compile("bypass", Pattern.CASE_INSENSITIVE)
+    private static final List<String> SUSPICIOUS_PHRASES = List.of(
+            "ignore all previous instructions",
+            "system message",
+            "you are now",
+            "system prompt",
+            "do not follow the rules",
+            "forget everything",
+            "bypass",
+            "new instructions",
+            "act as a",
+            "jailbreak"
     );
+
+    private static final List<Pattern> SUSPICIOUS_PATTERNS = buildPatterns(SUSPICIOUS_PHRASES);
+
+    private static List<Pattern> buildPatterns(List<String> phrases) {
+        List<Pattern> patterns = new ArrayList<>();
+        for (String phrase : phrases) {
+            patterns.add(buildObfuscationTolerantPattern(phrase));
+        }
+        return patterns;
+    }
+
+    /**
+     * Builds a regex pattern that tolerates whitespace and punctuation injection between characters.
+     * Example: "bypass" matches "b y p a s s", "b.y.p.a.s.s", "b_y_p_a_s_s"
+     */
+    private static Pattern buildObfuscationTolerantPattern(String phrase) {
+        StringBuilder regex = new StringBuilder();
+        for (char c : phrase.toCharArray()) {
+            if (Character.isWhitespace(c)) {
+                regex.append("[\\W_]+"); // At least some non-word character for space
+            } else {
+                // Escape regex specials just in case, though our phrases are alphabetic
+                regex.append(Pattern.quote(String.valueOf(c)));
+                regex.append("[\\W_]*"); // Optional non-word characters between letters
+            }
+        }
+        return Pattern.compile(regex.toString(), Pattern.CASE_INSENSITIVE);
+    }
 
     public ScanResponse.HeuristicResult scan(String text) {
         List<String> flags = new ArrayList<>();
@@ -28,9 +58,13 @@ public class HeuristicScannerService {
             return new ScanResponse.HeuristicResult(true, flags);
         }
 
-        for (Pattern pattern : SUSPICIOUS_PATTERNS) {
-            if (pattern.matcher(text).find()) {
-                flags.add("Detected suspicious phrase matching pattern: " + pattern.pattern());
+        // Normalize text to remove invisible unicode characters like zero-width spaces
+        String normalizedText = text.replaceAll("[\\p{Cf}]", "");
+
+        for (int i = 0; i < SUSPICIOUS_PATTERNS.size(); i++) {
+            Pattern pattern = SUSPICIOUS_PATTERNS.get(i);
+            if (pattern.matcher(normalizedText).find()) {
+                flags.add("Detected suspicious phrase matching: '" + SUSPICIOUS_PHRASES.get(i) + "' (obfuscation ignored)");
             }
         }
 
