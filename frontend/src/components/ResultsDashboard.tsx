@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, CheckCircle, ShieldAlert, FileSearch, Sparkles, LayoutDashboard, ChevronLeft, ChevronRight } from 'lucide-react';
+import { AlertTriangle, CheckCircle, ShieldAlert, FileSearch, Sparkles, LayoutDashboard, ChevronLeft, ChevronRight, EyeOff } from 'lucide-react';
 import { ScanResponse } from '../types';
 
 interface ResultsDashboardProps {
@@ -95,6 +95,32 @@ export default function ResultsDashboard({ results, loading }: ResultsDashboardP
                 </div>
               );
             })()
+          )}
+
+          {results.visualObfuscationResult && (
+            <div className={`result-card ${results.visualObfuscationResult.safe ? 'safe' : 'danger'}`}>
+              <div className="result-header">
+                <h3>
+                  <EyeOff size={16} />
+                  Visual Obfuscation Audit
+                </h3>
+                <span className={`badge ${results.visualObfuscationResult.safe ? 'safe' : 'danger'}`}>
+                  {results.visualObfuscationResult.safe ? <CheckCircle size={12} /> : <AlertTriangle size={12} />}
+                  {results.visualObfuscationResult.safe ? 'Secure' : 'Flagged'}
+                </span>
+              </div>
+              <div className="result-content">
+                {!results.visualObfuscationResult.safe ? (
+                  <ul>
+                    {results.visualObfuscationResult.findings?.map((finding, idx) => (
+                      <li key={idx}>{finding}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No invisible, tiny, or obfuscated text detected.</p>
+                )}
+              </div>
+            </div>
           )}
 
           {results.heuristicResult && (

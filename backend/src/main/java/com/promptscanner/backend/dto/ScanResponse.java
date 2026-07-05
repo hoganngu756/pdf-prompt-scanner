@@ -5,6 +5,7 @@ import java.util.List;
 public class ScanResponse {
     private HeuristicResult heuristicResult;
     private LlmResult llmResult;
+    private VisualObfuscationResult visualObfuscationResult;
     private String error;
     private List<String> previewImagesBase64;
 
@@ -18,6 +19,9 @@ public class ScanResponse {
 
     public LlmResult getLlmResult() { return llmResult; }
     public void setLlmResult(LlmResult llmResult) { this.llmResult = llmResult; }
+
+    public VisualObfuscationResult getVisualObfuscationResult() { return visualObfuscationResult; }
+    public void setVisualObfuscationResult(VisualObfuscationResult visualObfuscationResult) { this.visualObfuscationResult = visualObfuscationResult; }
 
     public String getError() { return error; }
     public void setError(String error) { this.error = error; }
@@ -52,5 +56,21 @@ public class ScanResponse {
         public void setSafe(boolean safe) { this.safe = safe; }
         public String getAnalysis() { return analysis; }
         public void setAnalysis(String analysis) { this.analysis = analysis; }
+    }
+
+    public static class VisualObfuscationResult {
+        private boolean safe;
+        private List<String> findings;
+
+        public VisualObfuscationResult() {}
+        public VisualObfuscationResult(boolean safe, List<String> findings) {
+            this.safe = safe;
+            this.findings = findings;
+        }
+
+        public boolean isSafe() { return safe; }
+        public void setSafe(boolean safe) { this.safe = safe; }
+        public List<String> getFindings() { return findings; }
+        public void setFindings(List<String> findings) { this.findings = findings; }
     }
 }

@@ -85,8 +85,19 @@ public class ScanController {
             boolean isOverallSafe = true;
             String hFlagsStr = "";
             String lExplanation = "";
+            String vFlagsStr = "";
 
-            // PHASE 3: Heuristic Scan
+            // Visual Obfuscation Scan
+            List<String> voFindings = pdfData.visualObfuscationFindings;
+            boolean isVoSafe = voFindings.isEmpty();
+            ScanResponse.VisualObfuscationResult voResult = new ScanResponse.VisualObfuscationResult(isVoSafe, voFindings);
+            response.setVisualObfuscationResult(voResult);
+            if (!isVoSafe) {
+                isOverallSafe = false;
+                vFlagsStr = String.join(" | ", voFindings);
+            }
+
+            // Heuristic Scan
             if (useHeuristics) {
                 ScanResponse.HeuristicResult hResult = heuristicScannerService.scan(extractedText);
                 response.setHeuristicResult(hResult);
@@ -96,7 +107,7 @@ public class ScanController {
                 }
             }
 
-            // PHASE 3: LLM Scan
+            // LLM Scan
             if (useLLM) {
                 ScanResponse.LlmResult lResult = llmScannerService.scan(extractedText);
                 response.setLlmResult(lResult);
@@ -111,6 +122,7 @@ public class ScanController {
             record.setSafe(isOverallSafe);
             record.setHeuristicFlags(hFlagsStr);
             record.setLlmExplanation(lExplanation);
+            record.setVisualFlags(vFlagsStr);
             scanRecordRepository.save(record);
 
             return ResponseEntity.ok(response);

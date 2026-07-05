@@ -40,7 +40,13 @@ export default function HistoryTable({ history }: HistoryTableProps) {
                     </span>
                   </td>
                   <td style={{ fontSize: '0.85rem', color: '#6b7280', maxWidth: '320px' }}>
-                    {record.llmExplanation || record.heuristicFlags || 'No issues found'}
+                    {(() => {
+                      const details = [];
+                      if (record.visualFlags) details.push(`[Visual: ${record.visualFlags}]`);
+                      if (record.heuristicFlags) details.push(`[Heuristics: ${record.heuristicFlags}]`);
+                      if (record.llmExplanation) details.push(`[AI: ${record.llmExplanation}]`);
+                      return details.length > 0 ? details.join(' ') : 'No issues found';
+                    })()}
                   </td>
                 </tr>
               ))}

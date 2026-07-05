@@ -4,6 +4,8 @@ import UploadSection from './components/UploadSection'
 import ResultsDashboard from './components/ResultsDashboard'
 import HistoryTable from './components/HistoryTable'
 import RulesManager from './components/RulesManager'
+import WelcomeGuide from './components/WelcomeGuide'
+import ExamplePdfs from './components/ExamplePdfs'
 import { Toaster, toast } from 'react-hot-toast'
 import { ScanResponse, ScanRecord } from './types'
 import './index.css'
@@ -88,6 +90,12 @@ function App() {
     }
   }
 
+  const handleSelectSample = (sampleFile: File) => {
+    setFile(sampleFile)
+    setResults(null)
+    toast.success(`Loaded "${sampleFile.name}" — click Analyze Document to scan it.`)
+  }
+
   return (
     <div className="app-container">
       <Toaster 
@@ -105,18 +113,32 @@ function App() {
 
       {activeTab === 'scan' && (
         <main className="main-content">
-          <UploadSection 
-            file={file}
-            setFile={setFile}
-            handleFileChange={handleFileChange}
-            useHeuristics={useHeuristics}
-            setUseHeuristics={setUseHeuristics}
-            useLLM={useLLM}
-            setUseLLM={setUseLLM}
-            loading={loading}
-            handleScan={handleScan}
-          />
-          <ResultsDashboard results={results} loading={loading} />
+          <div>
+            <UploadSection 
+              file={file}
+              setFile={setFile}
+              handleFileChange={handleFileChange}
+              useHeuristics={useHeuristics}
+              setUseHeuristics={setUseHeuristics}
+              useLLM={useLLM}
+              setUseLLM={setUseLLM}
+              loading={loading}
+              handleScan={handleScan}
+            />
+            <div style={{ marginTop: '16px' }}>
+              <div className="card">
+                <ExamplePdfs onSelectSample={handleSelectSample} />
+              </div>
+            </div>
+          </div>
+          <div>
+            <ResultsDashboard results={results} loading={loading} />
+            {!results && !loading && (
+              <div className="card" style={{ marginTop: '16px' }}>
+                <WelcomeGuide />
+              </div>
+            )}
+          </div>
         </main>
       )}
 

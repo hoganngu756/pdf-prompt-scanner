@@ -25,9 +25,15 @@ export interface LlmResult {
   analysis: string;
 }
 
+export interface VisualObfuscationResult {
+  safe: boolean;
+  findings: string[];
+}
+
 export interface ScanResponse {
   heuristicResult?: HeuristicResult;
   llmResult?: LlmResult;
+  visualObfuscationResult?: VisualObfuscationResult;
   error?: string;
   previewImagesBase64?: string[];
 }
