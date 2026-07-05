@@ -10,7 +10,7 @@ export default function Header({ activeTab, setActiveTab }: HeaderProps) {
     <header>
       <div className="header-left">
         <ShieldCheck size={24} color="#3b82f6" />
-        <h1>PDF Prompt Scanner</h1>
+        <h1 className="main-logo">PDF Prompt Scanner</h1>
       </div>
       <div className="header-tabs">
         <button 

@@ -129,7 +129,7 @@ export default function UploadSection({
         )}
       </button>
 
-      <p style={{ fontSize: '0.78rem', color: '#9ca3af', textAlign: 'center' }}>
+      <p style={{ fontSize: '0.78rem', color: '#6b7280', textAlign: 'center' }}>
         First scan may take ~60s if the backend is waking up.
       </p>
     </section>

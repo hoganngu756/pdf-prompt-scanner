@@ -93,7 +93,7 @@ export default function ExamplePdfs({ onSelectSample }: ExamplePdfsProps) {
               <div className="sample-label">
                 {sample.safe 
                   ? <CheckCircle size={14} color="#16a34a" /> 
-                  : <AlertTriangle size={14} color="#dc2626" />
+                  : <AlertTriangle size={14} color="#d97706" />
                 }
                 <strong>{sample.label}</strong>
                 {!sample.safe && (
