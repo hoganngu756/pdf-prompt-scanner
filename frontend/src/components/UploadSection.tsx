@@ -52,7 +52,7 @@ export default function UploadSection({
   return (
     <section className="card upload-section">
       <h2 className="card-title">
-        <FileUp size={24} color="var(--accent-color)" />
+        <FileUp size={18} />
         Upload Document
       </h2>
       
@@ -65,10 +65,10 @@ export default function UploadSection({
         onDrop={handleDrop}
       >
         <div className="file-drop-icon">
-          {file ? <FileText size={48} /> : <FileUp size={48} />}
+          {file ? <FileText size={40} /> : <FileUp size={40} />}
         </div>
-        <h3>{file ? file.name : 'Drag & drop PDF files here'}</h3>
-        <p>{file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : 'or click to browse'}</p>
+        <h3>{file ? file.name : 'Drag & drop a PDF here'}</h3>
+        <p>{file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : 'or click to browse files'}</p>
         <input 
           id="file-upload"
           type="file" 
@@ -79,9 +79,9 @@ export default function UploadSection({
       </div>
 
       <div className="settings-group">
-        <h4 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', color: 'var(--text-secondary)' }}>
-          <Settings size={18} />
-          Scan Configurations
+        <h4 style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', color: '#6b7280', fontSize: '0.8rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+          <Settings size={14} />
+          Scan Options
         </h4>
         <label className="toggle-label">
           <input 
@@ -89,7 +89,7 @@ export default function UploadSection({
             checked={useHeuristics} 
             onChange={(e) => setUseHeuristics(e.target.checked)} 
           />
-          <ShieldAlert size={18} color={useHeuristics ? "var(--accent-color)" : "var(--text-secondary)"} />
+          <ShieldAlert size={16} color={useHeuristics ? "#3b82f6" : "#9ca3af"} />
           Heuristics Scan
         </label>
         <label className="toggle-label">
@@ -98,8 +98,8 @@ export default function UploadSection({
             checked={useLLM} 
             onChange={(e) => setUseLLM(e.target.checked)} 
           />
-          <Cpu size={18} color={useLLM ? "var(--accent-color)" : "var(--text-secondary)"} />
-          LLM AI Analysis
+          <Cpu size={16} color={useLLM ? "#3b82f6" : "#9ca3af"} />
+          AI Analysis (Gemini)
         </label>
       </div>
 
@@ -109,16 +109,15 @@ export default function UploadSection({
         disabled={!file || loading}
       >
         {loading ? (
-          <><Loader2 className="animate-spin" size={20} /> Scanning Document...</>
+          <><Loader2 className="animate-spin" size={18} /> Scanning…</>
         ) : (
-          <><ScanSearch size={20} /> Analyze Document</>
+          <><ScanSearch size={18} /> Analyze Document</>
         )}
       </button>
 
-      <div style={{ marginTop: '12px', fontSize: '0.85rem', color: 'var(--text-secondary)', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-        <span style={{ fontSize: '1rem' }}>ℹ️</span>
-        <em>Note: Backend runs on a free tier. The first scan may take up to 60s to wake up.</em>
-      </div>
+      <p style={{ fontSize: '0.78rem', color: '#9ca3af', textAlign: 'center' }}>
+        First scan may take ~60s if the backend is waking up.
+      </p>
     </section>
   );
 }

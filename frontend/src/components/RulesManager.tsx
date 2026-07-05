@@ -9,12 +9,10 @@ export default function RulesManager() {
   const [rules, setRules] = useState<HeuristicRule[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Add Rule Form State
   const [newPhrase, setNewPhrase] = useState('');
   const [newIsRegex, setNewIsRegex] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Edit Rule Row State
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editPhrase, setEditPhrase] = useState('');
   const [editIsRegex, setEditIsRegex] = useState(false);
@@ -154,11 +152,10 @@ export default function RulesManager() {
     <div className="main-content" style={{ gridTemplateColumns: '1fr' }}>
       <div className="card">
         <h2 className="card-title">
-          <Settings size={24} color="var(--accent-color)" />
-          Heuristics Rules Manager
+          <Settings size={18} />
+          Heuristics Rules
         </h2>
 
-        {/* Add Rule Form */}
         <form onSubmit={handleAddRule} className="rule-form">
           <div className="form-row">
             <div className="input-group">
@@ -180,34 +177,33 @@ export default function RulesManager() {
                   onChange={e => setNewIsRegex(e.target.checked)}
                   disabled={submitting}
                 />
-                Use Regular Expression (Regex)
+                Regex
               </label>
               <span className="tooltip-info" title="Regex rules match raw patterns. Non-regex rules are auto-expanded to ignore spacing, dots, and common text obfuscation.">
-                <HelpCircle size={16} color="var(--text-secondary)" />
+                <HelpCircle size={14} color="#9ca3af" />
               </span>
             </div>
             <button type="submit" className="btn-primary add-rule-btn" disabled={submitting}>
-              <Plus size={18} />
+              <Plus size={16} />
               Add Rule
             </button>
           </div>
         </form>
 
-        {/* Rules Table */}
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-secondary)' }}>
-            Loading heuristics rules...
+          <div style={{ textAlign: 'center', padding: '40px 0', color: '#9ca3af' }}>
+            Loading rules…
           </div>
         ) : rules.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-secondary)' }}>
-            No heuristic rules defined. Add a rule above or reload defaults.
+          <div style={{ textAlign: 'center', padding: '40px 0', color: '#9ca3af' }}>
+            No heuristic rules defined yet.
           </div>
         ) : (
-          <div className="history-table-container" style={{ marginTop: '24px' }}>
+          <div className="history-table-container" style={{ marginTop: '16px' }}>
             <table>
               <thead>
                 <tr>
-                  <th>Detection Pattern</th>
+                  <th>Pattern</th>
                   <th>Type</th>
                   <th>Status</th>
                   <th style={{ textAlign: 'right' }}>Actions</th>
@@ -216,7 +212,6 @@ export default function RulesManager() {
               <tbody>
                 {rules.map(rule => {
                   const isEditing = editingId === rule.id;
-
                   return (
                     <tr key={rule.id}>
                       <td>
@@ -228,12 +223,12 @@ export default function RulesManager() {
                             onChange={e => setEditPhrase(e.target.value)}
                           />
                         ) : (
-                          <code style={{ fontSize: '0.95rem' }}>{rule.phrase}</code>
+                          <code style={{ fontSize: '0.85rem' }}>{rule.phrase}</code>
                         )}
                       </td>
                       <td>
                         {isEditing ? (
-                          <label className="toggle-label" style={{ fontSize: '0.85rem' }}>
+                          <label className="toggle-label" style={{ fontSize: '0.8rem' }}>
                             <input 
                               type="checkbox"
                               checked={editIsRegex}
@@ -242,7 +237,7 @@ export default function RulesManager() {
                             Regex
                           </label>
                         ) : (
-                          <span className={`badge ${rule.isRegex ? 'danger' : 'safe'}`} style={{ fontSize: '0.75rem', padding: '4px 10px' }}>
+                          <span className={`badge ${rule.isRegex ? 'danger' : 'safe'}`} style={{ fontSize: '0.7rem', padding: '2px 8px' }}>
                             {rule.isRegex ? 'Regex' : 'Literal'}
                           </span>
                         )}
@@ -258,50 +253,34 @@ export default function RulesManager() {
                             cursor: 'pointer',
                             display: 'flex',
                             alignItems: 'center',
-                            color: rule.active ? 'var(--success-color)' : 'var(--text-secondary)',
-                            transition: 'color var(--transition-fast)'
+                            color: rule.active ? '#16a34a' : '#9ca3af',
+                            transition: 'color 0.15s'
                           }}
                         >
-                          {rule.active ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
-                          <span style={{ marginLeft: '8px', fontSize: '0.85rem' }}>
-                            {rule.active ? 'Active' : 'Disabled'}
+                          {rule.active ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
+                          <span style={{ marginLeft: '6px', fontSize: '0.8rem' }}>
+                            {rule.active ? 'Active' : 'Off'}
                           </span>
                         </button>
                       </td>
                       <td style={{ textAlign: 'right' }}>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}>
                           {isEditing ? (
                             <>
-                              <button 
-                                onClick={() => handleSaveEdit(rule.id, rule.active)}
-                                className="action-icon-btn save"
-                                title="Save changes"
-                              >
-                                <Save size={18} />
+                              <button onClick={() => handleSaveEdit(rule.id, rule.active)} className="action-icon-btn save" title="Save changes">
+                                <Save size={16} />
                               </button>
-                              <button 
-                                onClick={cancelEdit}
-                                className="action-icon-btn cancel"
-                                title="Cancel editing"
-                              >
-                                <X size={18} />
+                              <button onClick={cancelEdit} className="action-icon-btn cancel" title="Cancel editing">
+                                <X size={16} />
                               </button>
                             </>
                           ) : (
                             <>
-                              <button 
-                                onClick={() => startEdit(rule)}
-                                className="action-icon-btn edit"
-                                title="Edit rule"
-                              >
-                                <Edit2 size={18} />
+                              <button onClick={() => startEdit(rule)} className="action-icon-btn edit" title="Edit rule">
+                                <Edit2 size={16} />
                               </button>
-                              <button 
-                                onClick={() => handleDeleteRule(rule.id)}
-                                className="action-icon-btn delete"
-                                title="Delete rule"
-                              >
-                                <Trash2 size={18} />
+                              <button onClick={() => handleDeleteRule(rule.id)} className="action-icon-btn delete" title="Delete rule">
+                                <Trash2 size={16} />
                               </button>
                             </>
                           )}

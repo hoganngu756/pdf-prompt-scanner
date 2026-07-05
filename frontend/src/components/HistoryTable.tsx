@@ -9,12 +9,12 @@ export default function HistoryTable({ history }: HistoryTableProps) {
   return (
     <div className="card">
       <h2 className="card-title">
-        <History size={24} color="var(--accent-color)" />
+        <History size={18} />
         Scan History
       </h2>
       {history.length === 0 ? (
-        <div style={{color: 'var(--text-secondary)', textAlign: 'center', padding: '40px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px'}}>
-          <SearchX size={48} color="rgba(255,255,255,0.1)" />
+        <div style={{ color: '#9ca3af', textAlign: 'center', padding: '48px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+          <SearchX size={40} color="#e5e7eb" />
           <p>No scans have been performed yet.</p>
         </div>
       ) : (
@@ -25,21 +25,21 @@ export default function HistoryTable({ history }: HistoryTableProps) {
                 <th>Date</th>
                 <th>File Name</th>
                 <th>Status</th>
-                <th>Explanation</th>
+                <th>Details</th>
               </tr>
             </thead>
             <tbody>
               {history.map(record => (
                 <tr key={record.id}>
-                  <td style={{whiteSpace: 'nowrap'}}>{new Date(record.scanDate).toLocaleString()}</td>
-                  <td style={{fontWeight: '500'}}>{record.fileName}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{new Date(record.scanDate).toLocaleString()}</td>
+                  <td style={{ fontWeight: 500 }}>{record.fileName}</td>
                   <td>
                     <span className={`badge ${record.safe ? 'safe' : 'danger'}`}>
-                      {record.safe ? <CheckCircle size={14} /> : <AlertTriangle size={14} />}
+                      {record.safe ? <CheckCircle size={12} /> : <AlertTriangle size={12} />}
                       {record.safe ? 'Secure' : 'Flagged'}
                     </span>
                   </td>
-                  <td style={{fontSize: '0.95rem', color: 'var(--text-secondary)'}}>
+                  <td style={{ fontSize: '0.85rem', color: '#6b7280', maxWidth: '320px' }}>
                     {record.llmExplanation || record.heuristicFlags || 'No issues found'}
                   </td>
                 </tr>
