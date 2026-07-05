@@ -1,5 +1,8 @@
 # PDF Prompt Scanner
 
+🚀 **Live Deployment**: [pdf-prompt-scanner.vercel.app](https://pdf-prompt-scanner.vercel.app)  
+*(Note: The backend is hosted on Render's free tier. The first scan may take up to 50 seconds to wake up the server).*
+
 PDF Prompt Scanner is a full-stack security-auditing web application developed to detect hidden instructions, visual obfuscations, or prompt injections inside PDF documents that could hijack or jailbreak downstream LLM AI systems.
 
 It combines static heuristic analysis (custom SQLite-backed rules), computer-vision visual obfuscation audits (for invisible white text or tiny text), and deep AI context scanning (powered by the Gemini API) to ensure documents are safe for consumption by AI models.
@@ -61,17 +64,19 @@ The frontend application will start locally at `http://localhost:5173`.
 The application is architected to be easily deployed to production cloud platforms.
 
 ### Frontend Deployment (Vercel)
-The React/Vite frontend includes a `vercel.json` rewrite routing structure for single-page applications. 
+The React/Vite frontend is deployed on **Vercel** at [pdf-prompt-scanner.vercel.app](https://pdf-prompt-scanner.vercel.app).
+To configure or redeploy:
 1. Push your repository to GitHub.
 2. Link your repository to a new project in **Vercel**.
 3. Set the production environment variable:
-   - `VITE_API_BASE_URL`: The URL of your deployed backend service (e.g., `https://api-promptscanner.onrender.com/api`).
+   - `VITE_API_BASE_URL`: The URL of your deployed backend service on Render (e.g., `https://pdf-prompt-scanner-backend.onrender.com/api`).
 4. Vercel will deploy the application automatically.
 
-### Backend Deployment (Docker Container)
-The backend service includes a multi-stage `Dockerfile` that packages the JRE alongside the system-level Tesseract OCR engine and English training datasets.
-1. Deploy the backend directory to any container-hosting platform (e.g., **Render**, **Fly.io**, **Railway**, or **Google Cloud Run**).
-2. Ensure you allocate persistent disk storage or configure database environment variables if you wish to persist the SQLite rules database across container restarts.
-3. Configure the following environment variables if needed:
-   - `SPRING_DATASOURCE_URL`: Custom database location or connection string.
+### Backend Deployment (Render)
+The backend service is containerized via Docker and deployed on **Render.com** (utilizing the multi-stage `Dockerfile` packaging Spring Boot alongside Tesseract OCR).
+To redeploy or update:
+1. Link your backend repository to Render as a Web Service.
+2. Render will automatically detect the `Dockerfile` and build the container.
+3. Configure the following environment variables on Render:
    - `GEMINI_API_KEY`: API key for the Gemini AI Scanner.
+   - `SPRING_DATASOURCE_URL`: Custom database location if persisting SQLite rules database state across redeploys.
