@@ -1,4 +1,4 @@
-import { ShieldCheck, History, ScanSearch } from 'lucide-react';
+import { ShieldCheck, History, ScanSearch, Settings } from 'lucide-react';
 
 export default function Header({ activeTab, setActiveTab }) {
   return (
@@ -21,6 +21,13 @@ export default function Header({ activeTab, setActiveTab }) {
         >
           <History size={18} />
           History
+        </button>
+        <button 
+          className={`tab-btn ${activeTab === 'rules' ? 'active' : ''}`}
+          onClick={() => setActiveTab('rules')}
+        >
+          <Settings size={18} />
+          Rules
         </button>
       </div>
     </header>

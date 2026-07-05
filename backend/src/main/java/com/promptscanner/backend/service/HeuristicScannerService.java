@@ -1,49 +1,39 @@
 package com.promptscanner.backend.service;
 
 import com.promptscanner.backend.dto.ScanResponse;
+import com.promptscanner.backend.entity.HeuristicRule;
+import com.promptscanner.backend.repository.HeuristicRuleRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 @Service
 public class HeuristicScannerService {
 
-    private static final List<String> SUSPICIOUS_PHRASES = List.of(
-            "ignore all previous instructions",
-            "system message",
-            "you are now",
-            "system prompt",
-            "do not follow the rules",
-            "forget everything",
-            "bypass",
-            "new instructions",
-            "act as a",
-            "jailbreak"
-    );
+    private static final Logger log = LoggerFactory.getLogger(HeuristicScannerService.class);
 
-    private static final List<Pattern> SUSPICIOUS_PATTERNS = buildPatterns(SUSPICIOUS_PHRASES);
+    private final HeuristicRuleRepository heuristicRuleRepository;
 
-    private static List<Pattern> buildPatterns(List<String> phrases) {
-        List<Pattern> patterns = new ArrayList<>();
-        for (String phrase : phrases) {
-            patterns.add(buildObfuscationTolerantPattern(phrase));
-        }
-        return patterns;
+    public HeuristicScannerService(HeuristicRuleRepository heuristicRuleRepository) {
+        this.heuristicRuleRepository = heuristicRuleRepository;
     }
 
     /**
      * Builds a regex pattern that tolerates whitespace and punctuation injection between characters.
      * Example: "bypass" matches "b y p a s s", "b.y.p.a.s.s", "b_y_p_a_s_s"
      */
-    private static Pattern buildObfuscationTolerantPattern(String phrase) {
+    private Pattern buildObfuscationTolerantPattern(String phrase) {
         StringBuilder regex = new StringBuilder();
         for (char c : phrase.toCharArray()) {
             if (Character.isWhitespace(c)) {
                 regex.append("[\\W_]+"); // At least some non-word character for space
             } else {
-                // Escape regex specials just in case, though our phrases are alphabetic
+                // Escape regex specials just in case
                 regex.append(Pattern.quote(String.valueOf(c)));
                 regex.append("[\\W_]{0,3}"); // Limit optional non-word characters between letters to avoid ReDoS
             }
@@ -61,10 +51,24 @@ public class HeuristicScannerService {
         // Normalize text to remove invisible unicode characters like zero-width spaces
         String normalizedText = text.replaceAll("[\\p{Cf}]", "");
 
-        for (int i = 0; i < SUSPICIOUS_PATTERNS.size(); i++) {
-            Pattern pattern = SUSPICIOUS_PATTERNS.get(i);
-            if (pattern.matcher(normalizedText).find()) {
-                flags.add("Detected suspicious phrase matching: '" + SUSPICIOUS_PHRASES.get(i) + "' (obfuscation ignored)");
+        List<HeuristicRule> activeRules = heuristicRuleRepository.findByIsActiveTrue();
+
+        for (HeuristicRule rule : activeRules) {
+            try {
+                Pattern pattern;
+                if (rule.isRegex()) {
+                    pattern = Pattern.compile(rule.getPhrase(), Pattern.CASE_INSENSITIVE);
+                } else {
+                    pattern = buildObfuscationTolerantPattern(rule.getPhrase());
+                }
+
+                if (pattern.matcher(normalizedText).find()) {
+                    String matchType = rule.isRegex() ? "regex pattern" : "phrase";
+                    flags.add("Detected suspicious " + matchType + " matching: '" + rule.getPhrase() + "'");
+                }
+            } catch (PatternSyntaxException e) {
+                // Log and skip invalid regex rules to keep scanner resilient
+                log.warn("Skipped invalid regex rule '{}': {}", rule.getPhrase(), e.getMessage());
             }
         }
 

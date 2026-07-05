@@ -27,6 +27,9 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
+import com.promptscanner.backend.entity.HeuristicRule;
+import com.promptscanner.backend.repository.HeuristicRuleRepository;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -35,11 +38,17 @@ public class PdfScannerService {
 
     private static final Logger log = LoggerFactory.getLogger(PdfScannerService.class);
 
+    private final HeuristicRuleRepository heuristicRuleRepository;
+
     @Value("${ocr.tessdata.path:}")
     private String tessDataPath;
 
     // Use ThreadLocal to cache Tesseract instances across requests safely
     private ThreadLocal<Tesseract> tesseractThreadLocal;
+
+    public PdfScannerService(HeuristicRuleRepository heuristicRuleRepository) {
+        this.heuristicRuleRepository = heuristicRuleRepository;
+    }
 
     @PostConstruct
     public void init() {
@@ -64,12 +73,25 @@ public class PdfScannerService {
         public List<String> previewImagesBase64 = new ArrayList<>();
     }
 
-    private static final List<String> HIGHLIGHT_WORDS = List.of(
-            "ignore", "previous", "instructions", "system", "message", "prompt", "bypass"
-    );
-
     public PdfData processPdf(MultipartFile file) throws IOException {
         PdfData data = new PdfData();
+
+        // Build active highlight words dynamically
+        List<HeuristicRule> activeRules = heuristicRuleRepository.findByIsActiveTrue();
+        Set<String> highlightWords = new HashSet<>();
+        for (HeuristicRule rule : activeRules) {
+            if (!rule.isRegex()) {
+                String[] words = rule.getPhrase().toLowerCase().split("[\\W_]+");
+                for (String w : words) {
+                    if (w.length() > 3) {
+                        highlightWords.add(w);
+                    }
+                }
+            }
+        }
+        if (highlightWords.isEmpty()) {
+            highlightWords.addAll(List.of("ignore", "previous", "instructions", "system", "message", "prompt", "bypass"));
+        }
 
         try (PDDocument document = Loader.loadPDF(file.getBytes())) {
             
@@ -91,7 +113,7 @@ public class PdfScannerService {
                     super.writeString(text, textPositions);
                     
                     String lowerText = text.toLowerCase();
-                    for (String word : HIGHLIGHT_WORDS) {
+                    for (String word : highlightWords) {
                         if (lowerText.contains(word)) {
                             float minX = Float.MAX_VALUE;
                             float minY = Float.MAX_VALUE;

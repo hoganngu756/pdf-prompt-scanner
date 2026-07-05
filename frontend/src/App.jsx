@@ -3,6 +3,7 @@ import Header from './components/Header'
 import UploadSection from './components/UploadSection'
 import ResultsDashboard from './components/ResultsDashboard'
 import HistoryTable from './components/HistoryTable'
+import RulesManager from './components/RulesManager'
 import { Toaster, toast } from 'react-hot-toast'
 import './index.css'
 
@@ -118,6 +119,10 @@ function App() {
 
       {activeTab === 'history' && (
         <HistoryTable history={history} />
+      )}
+
+      {activeTab === 'rules' && (
+        <RulesManager />
       )}
     </div>
   )

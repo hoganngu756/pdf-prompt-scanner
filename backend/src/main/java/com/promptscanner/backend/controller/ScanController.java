@@ -1,5 +1,7 @@
 package com.promptscanner.backend.controller;
 
+import com.promptscanner.backend.entity.HeuristicRule;
+import com.promptscanner.backend.repository.HeuristicRuleRepository;
 import com.promptscanner.backend.dto.ScanResponse;
 import com.promptscanner.backend.entity.ScanRecord;
 import com.promptscanner.backend.repository.ScanRecordRepository;
@@ -26,15 +28,18 @@ public class ScanController {
     private final HeuristicScannerService heuristicScannerService;
     private final LlmScannerService llmScannerService;
     private final ScanRecordRepository scanRecordRepository;
+    private final HeuristicRuleRepository heuristicRuleRepository;
 
     public ScanController(PdfScannerService pdfScannerService, 
                           HeuristicScannerService heuristicScannerService,
                           LlmScannerService llmScannerService,
-                          ScanRecordRepository scanRecordRepository) {
+                          ScanRecordRepository scanRecordRepository,
+                          HeuristicRuleRepository heuristicRuleRepository) {
         this.pdfScannerService = pdfScannerService;
         this.heuristicScannerService = heuristicScannerService;
         this.llmScannerService = llmScannerService;
         this.scanRecordRepository = scanRecordRepository;
+        this.heuristicRuleRepository = heuristicRuleRepository;
     }
 
     @GetMapping("/history")
@@ -112,5 +117,45 @@ public class ScanController {
         } catch (Exception e) {
             throw new RuntimeException("Failed to process the PDF file", e);
         }
+    }
+
+    // --- RULES ENDPOINTS ---
+
+    @GetMapping("/rules")
+    public ResponseEntity<List<HeuristicRule>> getRules() {
+        return ResponseEntity.ok(heuristicRuleRepository.findAll());
+    }
+
+    @PostMapping("/rules")
+    public ResponseEntity<HeuristicRule> createRule(@RequestBody HeuristicRule rule) {
+        if (rule.getPhrase() == null || rule.getPhrase().trim().isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+        // Force active by default if not set
+        if (!rule.isActive()) {
+            rule.setActive(true);
+        }
+        return ResponseEntity.ok(heuristicRuleRepository.save(rule));
+    }
+
+    @PutMapping("/rules/{id}")
+    public ResponseEntity<HeuristicRule> updateRule(@PathVariable("id") Long id, @RequestBody HeuristicRule updatedRule) {
+        return heuristicRuleRepository.findById(id)
+                .map(rule -> {
+                    rule.setPhrase(updatedRule.getPhrase());
+                    rule.setRegex(updatedRule.isRegex());
+                    rule.setActive(updatedRule.isActive());
+                    return ResponseEntity.ok(heuristicRuleRepository.save(rule));
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @DeleteMapping("/rules/{id}")
+    public ResponseEntity<Void> deleteRule(@PathVariable("id") Long id) {
+        if (heuristicRuleRepository.existsById(id)) {
+            heuristicRuleRepository.deleteById(id);
+            return ResponseEntity.ok().build();
+        }
+        return ResponseEntity.notFound().build();
     }
 }
