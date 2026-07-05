@@ -83,24 +83,38 @@ export default function UploadSection({
           <Settings size={14} />
           Scan Options
         </h4>
-        <label className="toggle-label">
-          <input 
-            type="checkbox" 
-            checked={useHeuristics} 
-            onChange={(e) => setUseHeuristics(e.target.checked)} 
-          />
-          <ShieldAlert size={16} color={useHeuristics ? "#3b82f6" : "#9ca3af"} />
-          Heuristics Scan
-        </label>
-        <label className="toggle-label">
-          <input 
-            type="checkbox" 
-            checked={useLLM} 
-            onChange={(e) => setUseLLM(e.target.checked)} 
-          />
-          <Cpu size={16} color={useLLM ? "#3b82f6" : "#9ca3af"} />
-          AI Analysis (Gemini)
-        </label>
+        
+        <div className="settings-option">
+          <label className="toggle-label">
+            <input 
+              type="checkbox" 
+              checked={useHeuristics} 
+              onChange={(e) => setUseHeuristics(e.target.checked)} 
+            />
+            <ShieldAlert size={16} color={useHeuristics ? "#3b82f6" : "#9ca3af"} />
+            Heuristics Scan
+          </label>
+          <div className="option-tooltip">
+            <strong>Heuristics Engine</strong>
+            <p>Scans the text for known malicious words, instruction overrides, and character obfuscation using static patterns.</p>
+          </div>
+        </div>
+
+        <div className="settings-option">
+          <label className="toggle-label">
+            <input 
+              type="checkbox" 
+              checked={useLLM} 
+              onChange={(e) => setUseLLM(e.target.checked)} 
+            />
+            <Cpu size={16} color={useLLM ? "#3b82f6" : "#9ca3af"} />
+            AI Analysis (Gemini)
+          </label>
+          <div className="option-tooltip">
+            <strong>AI Context Analysis</strong>
+            <p>Uses Gemini AI to inspect the document and detect complex prompt hijacking or jailbreak attempts by checking context and semantic intent.</p>
+          </div>
+        </div>
       </div>
 
       <button 

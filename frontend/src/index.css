@@ -657,6 +657,49 @@ tr:hover td {
   opacity: 0.8;
 }
 
+/* ===== Scan Configuration Tooltips ===== */
+.settings-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.option-tooltip {
+  position: absolute;
+  left: 105%;
+  top: 50%;
+  transform: translateY(-50%) translateX(-4px);
+  width: 240px;
+  background: var(--color-white);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  box-shadow: var(--shadow-md);
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.settings-option:hover .option-tooltip {
+  opacity: 1;
+  transform: translateY(-50%) translateX(4px);
+}
+
+.option-tooltip strong {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-gray-800);
+  margin-bottom: 4px;
+}
+
+.option-tooltip p {
+  font-size: 0.75rem;
+  color: var(--color-gray-500);
+  line-height: 1.45;
+}
+
 /* ===== Animations ===== */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(4px); }
@@ -969,6 +1012,19 @@ tr:hover td {
   .sample-btn.try {
     flex: 1;
     justify-content: center;
+  }
+}
+
+@media (max-width: 900px) {
+  .option-tooltip {
+    left: 0;
+    top: 100%;
+    transform: none;
+    width: 100%;
+    margin-top: 6px;
+  }
+  .settings-option:hover .option-tooltip {
+    transform: translateY(2px);
   }
 }
 
