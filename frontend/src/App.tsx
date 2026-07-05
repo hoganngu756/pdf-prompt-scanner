@@ -5,18 +5,19 @@ import ResultsDashboard from './components/ResultsDashboard'
 import HistoryTable from './components/HistoryTable'
 import RulesManager from './components/RulesManager'
 import { Toaster, toast } from 'react-hot-toast'
+import { ScanResponse, ScanRecord } from './types'
 import './index.css'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api'
 
 function App() {
-  const [file, setFile] = useState(null)
+  const [file, setFile] = useState<File | null>(null)
   const [useLLM, setUseLLM] = useState(true)
   const [useHeuristics, setUseHeuristics] = useState(true)
-  const [results, setResults] = useState(null)
+  const [results, setResults] = useState<ScanResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('scan')
-  const [history, setHistory] = useState([])
+  const [history, setHistory] = useState<ScanRecord[]>([])
 
   const fetchHistory = async () => {
     try {
@@ -36,7 +37,7 @@ function App() {
     }
   }, [activeTab])
 
-  const handleFileChange = (e) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       setFile(e.target.files[0])
     }
@@ -53,8 +54,8 @@ function App() {
 
     const formData = new FormData()
     formData.append('file', file)
-    formData.append('useLLM', useLLM)
-    formData.append('useHeuristics', useHeuristics)
+    formData.append('useLLM', String(useLLM))
+    formData.append('useHeuristics', String(useHeuristics))
 
     try {
       const response = await fetch(`${API_BASE_URL}/scan`, {
@@ -62,7 +63,7 @@ function App() {
         body: formData,
       })
       
-      let data;
+      let data: any;
       const contentType = response.headers.get("content-type");
       if (contentType && contentType.includes("application/json")) {
         data = await response.json();
@@ -79,8 +80,9 @@ function App() {
       toast.success('Scan completed successfully')
     } catch (error) {
       console.error('Error during scan:', error)
-      toast.error(error.message || 'Failed to connect to the server')
-      setResults({ error: error.message || 'Failed to connect to the server.' })
+      const errorMsg = error instanceof Error ? error.message : 'Failed to connect to the server';
+      toast.error(errorMsg)
+      setResults({ error: errorMsg })
     } finally {
       setLoading(false)
     }

@@ -19,7 +19,10 @@
     "react-hot-toast": "^2.6.0"
   },
   "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "typescript": "^6.0.3",
     "vite": "^8.0.11"
   }
 }

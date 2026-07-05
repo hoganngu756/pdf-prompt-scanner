@@ -1,6 +1,11 @@
 import { ShieldCheck, History, ScanSearch, Settings } from 'lucide-react';
 
-export default function Header({ activeTab, setActiveTab }) {
+interface HeaderProps {
+  activeTab: string;
+  setActiveTab: (tab: string) => void;
+}
+
+export default function Header({ activeTab, setActiveTab }: HeaderProps) {
   return (
     <header>
       <div className="header-left">

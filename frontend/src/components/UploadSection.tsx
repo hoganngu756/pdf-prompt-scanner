@@ -1,6 +1,18 @@
 import { useState } from 'react';
 import { FileUp, FileText, Settings, ShieldAlert, Cpu, ScanSearch, Loader2 } from 'lucide-react';
 
+interface UploadSectionProps {
+  file: File | null;
+  setFile: (file: File | null) => void;
+  handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  useHeuristics: boolean;
+  setUseHeuristics: (val: boolean) => void;
+  useLLM: boolean;
+  setUseLLM: (val: boolean) => void;
+  loading: boolean;
+  handleScan: () => void;
+}
+
 export default function UploadSection({ 
   file, 
   setFile,
@@ -11,10 +23,10 @@ export default function UploadSection({
   setUseLLM, 
   loading, 
   handleScan 
-}) {
+}: UploadSectionProps) {
   const [dragActive, setDragActive] = useState(false);
 
-  const handleDrag = (e) => {
+  const handleDrag = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     if (e.type === "dragenter" || e.type === "dragover") {
@@ -24,7 +36,7 @@ export default function UploadSection({
     }
   };
 
-  const handleDrop = (e) => {
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
@@ -46,7 +58,7 @@ export default function UploadSection({
       
       <div 
         className={`file-drop-zone ${dragActive ? 'active' : ''}`}
-        onClick={() => document.getElementById('file-upload').click()}
+        onClick={() => document.getElementById('file-upload')?.click()}
         onDragEnter={handleDrag}
         onDragOver={handleDrag}
         onDragLeave={handleDrag}

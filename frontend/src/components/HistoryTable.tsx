@@ -1,6 +1,11 @@
 import { History, CheckCircle, AlertTriangle, SearchX } from 'lucide-react';
+import { ScanRecord } from '../types';
 
-export default function HistoryTable({ history }) {
+interface HistoryTableProps {
+  history: ScanRecord[];
+}
+
+export default function HistoryTable({ history }: HistoryTableProps) {
   return (
     <div className="card">
       <h2 className="card-title">

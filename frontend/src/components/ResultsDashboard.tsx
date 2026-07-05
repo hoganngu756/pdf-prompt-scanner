@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react';
 import { AlertTriangle, CheckCircle, ShieldAlert, FileSearch, Sparkles, LayoutDashboard, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ScanResponse } from '../types';
 
-export default function ResultsDashboard({ results, loading }) {
+interface ResultsDashboardProps {
+  results: ScanResponse | null;
+  loading: boolean;
+}
+
+export default function ResultsDashboard({ results, loading }: ResultsDashboardProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
 
   useEffect(() => {
@@ -34,56 +40,61 @@ export default function ResultsDashboard({ results, loading }) {
       {results && !results.error && (
         <>
           {results.previewImagesBase64 && results.previewImagesBase64.length > 0 && (
-            <div className="preview-container">
-              <div className="preview-header">
-                <h3><FileSearch size={18} /> Document Preview</h3>
-                <span style={{fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: '500'}}>
-                  Page {currentIndex + 1} of {results.previewImagesBase64.length}
-                </span>
-              </div>
-              
-              <div className="carousel-body">
-                {results.previewImagesBase64.length > 1 && (
-                  <button 
-                    onClick={() => setCurrentIndex(prev => (prev - 1 + results.previewImagesBase64.length) % results.previewImagesBase64.length)}
-                    className="carousel-nav-btn prev"
-                    title="Previous Page"
-                  >
-                    <ChevronLeft size={22} />
-                  </button>
-                )}
+            (() => {
+              const previewImages = results.previewImagesBase64;
+              return (
+                <div className="preview-container">
+                  <div className="preview-header">
+                    <h3><FileSearch size={18} /> Document Preview</h3>
+                    <span style={{fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: '500'}}>
+                      Page {currentIndex + 1} of {previewImages.length}
+                    </span>
+                  </div>
+                  
+                  <div className="carousel-body">
+                    {previewImages.length > 1 && (
+                      <button 
+                        onClick={() => setCurrentIndex(prev => (prev - 1 + previewImages.length) % previewImages.length)}
+                        className="carousel-nav-btn prev"
+                        title="Previous Page"
+                      >
+                        <ChevronLeft size={22} />
+                      </button>
+                    )}
 
-                <div className="carousel-slide">
-                  <img 
-                    src={results.previewImagesBase64[currentIndex]} 
-                    alt={`PDF Preview Page ${currentIndex + 1}`} 
-                  />
+                    <div className="carousel-slide">
+                      <img 
+                        src={previewImages[currentIndex]} 
+                        alt={`PDF Preview Page ${currentIndex + 1}`} 
+                      />
+                    </div>
+
+                    {previewImages.length > 1 && (
+                      <button 
+                        onClick={() => setCurrentIndex(prev => (prev + 1) % previewImages.length)}
+                        className="carousel-nav-btn next"
+                        title="Next Page"
+                      >
+                        <ChevronRight size={22} />
+                      </button>
+                    )}
+                  </div>
+
+                  {previewImages.length > 1 && (
+                    <div className="carousel-indicators">
+                      {previewImages.map((_, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setCurrentIndex(idx)}
+                          className={`carousel-indicator-dot ${currentIndex === idx ? 'active' : ''}`}
+                          title={`Go to page ${idx + 1}`}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
-
-                {results.previewImagesBase64.length > 1 && (
-                  <button 
-                    onClick={() => setCurrentIndex(prev => (prev + 1) % results.previewImagesBase64.length)}
-                    className="carousel-nav-btn next"
-                    title="Next Page"
-                  >
-                    <ChevronRight size={22} />
-                  </button>
-                )}
-              </div>
-
-              {results.previewImagesBase64.length > 1 && (
-                <div className="carousel-indicators">
-                  {results.previewImagesBase64.map((_, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => setCurrentIndex(idx)}
-                      className={`carousel-indicator-dot ${currentIndex === idx ? 'active' : ''}`}
-                      title={`Go to page ${idx + 1}`}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
+              );
+            })()
           )}
 
           {results.heuristicResult && (
@@ -98,7 +109,7 @@ export default function ResultsDashboard({ results, loading }) {
               <div className="result-content">
                 {!results.heuristicResult.safe ? (
                   <ul>
-                    {results.heuristicResult.flags.map((flag, idx) => (
+                    {results.heuristicResult.flags?.map((flag, idx) => (
                       <li key={idx}>{flag}</li>
                     ))}
                   </ul>

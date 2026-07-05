@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Settings, Plus, Trash2, Edit2, Save, X, ToggleLeft, ToggleRight, HelpCircle } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { HeuristicRule } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api';
 
 export default function RulesManager() {
-  const [rules, setRules] = useState([]);
+  const [rules, setRules] = useState<HeuristicRule[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Add Rule Form State
@@ -14,7 +15,7 @@ export default function RulesManager() {
   const [submitting, setSubmitting] = useState(false);
 
   // Edit Rule Row State
-  const [editingId, setEditingId] = useState(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [editPhrase, setEditPhrase] = useState('');
   const [editIsRegex, setEditIsRegex] = useState(false);
 
@@ -36,7 +37,7 @@ export default function RulesManager() {
     fetchRules();
   }, []);
 
-  const handleAddRule = async (e) => {
+  const handleAddRule = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPhrase.trim()) {
       toast.error('Rule phrase cannot be empty');
@@ -70,7 +71,7 @@ export default function RulesManager() {
     }
   };
 
-  const handleToggleActive = async (rule) => {
+  const handleToggleActive = async (rule: HeuristicRule) => {
     try {
       const response = await fetch(`${API_BASE_URL}/rules/${rule.id}`, {
         method: 'PUT',
@@ -92,7 +93,7 @@ export default function RulesManager() {
     }
   };
 
-  const handleDeleteRule = async (id) => {
+  const handleDeleteRule = async (id: number) => {
     if (!confirm('Are you sure you want to delete this rule?')) return;
 
     try {
@@ -109,7 +110,7 @@ export default function RulesManager() {
     }
   };
 
-  const startEdit = (rule) => {
+  const startEdit = (rule: HeuristicRule) => {
     setEditingId(rule.id);
     setEditPhrase(rule.phrase);
     setEditIsRegex(rule.isRegex);
@@ -121,7 +122,7 @@ export default function RulesManager() {
     setEditIsRegex(false);
   };
 
-  const handleSaveEdit = async (ruleId, currentActive) => {
+  const handleSaveEdit = async (ruleId: number, currentActive: boolean) => {
     if (!editPhrase.trim()) {
       toast.error('Rule phrase cannot be empty');
       return;
