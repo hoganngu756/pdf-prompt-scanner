@@ -125,17 +125,17 @@ function App() {
               loading={loading}
               handleScan={handleScan}
             />
-            <div style={{ marginTop: '16px' }}>
-              <div className="card">
-                <ExamplePdfs onSelectSample={handleSelectSample} />
-              </div>
-            </div>
           </div>
           <div>
             <ResultsDashboard results={results} loading={loading} />
             {!results && !loading && (
-              <div className="card" style={{ marginTop: '16px' }}>
-                <WelcomeGuide />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                <div className="card">
+                  <WelcomeGuide />
+                </div>
+                <div className="card">
+                  <ExamplePdfs onSelectSample={handleSelectSample} />
+                </div>
               </div>
             )}
           </div>

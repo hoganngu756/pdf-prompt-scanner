@@ -86,9 +86,9 @@ export default function ExamplePdfs({ onSelectSample }: ExamplePdfsProps) {
         Download or load these sample documents to see the scanner in action. Each contains a different prompt injection technique.
       </p>
 
-      <div className="sample-list">
+      <div className="sample-grid">
         {SAMPLES.map((sample) => (
-          <div key={sample.filename} className={`sample-item ${sample.safe ? 'safe' : 'danger'}`}>
+          <div key={sample.filename} className={`sample-card ${sample.safe ? 'safe' : 'danger'}`}>
             <div className="sample-info">
               <div className="sample-label">
                 {sample.safe 

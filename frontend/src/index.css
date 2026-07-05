@@ -826,39 +826,40 @@ tr:hover td {
   line-height: 1.5;
 }
 
-.sample-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.sample-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
 }
 
-.sample-item {
+.sample-card {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
+  padding: 16px;
   border: 1px solid var(--color-gray-200);
   border-radius: var(--radius-md);
   background: var(--color-white);
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.sample-item:hover {
-  border-color: var(--color-gray-300);
+.sample-card:hover {
+  border-color: var(--color-blue-300);
+  box-shadow: var(--shadow-md);
 }
 
-.sample-item.danger {
+.sample-card.danger {
   border-left: 3px solid var(--color-red-600);
 }
 
-.sample-item.safe {
+.sample-card.safe {
   border-left: 3px solid var(--color-green-600);
 }
 
 .sample-info {
+  display: flex;
+  flex-direction: column;
   flex: 1;
-  min-width: 0;
 }
 
 .sample-label {
@@ -866,7 +867,7 @@ tr:hover td {
   align-items: center;
   gap: 6px;
   font-size: 0.85rem;
-  margin-bottom: 2px;
+  margin-bottom: 6px;
 }
 
 .sample-label strong {
@@ -887,25 +888,28 @@ tr:hover td {
 .sample-desc {
   font-size: 0.78rem;
   color: var(--color-gray-500);
-  line-height: 1.4;
+  line-height: 1.45;
+  margin-bottom: 14px;
+  flex: 1;
 }
 
 .sample-actions {
   display: flex;
-  gap: 6px;
-  flex-shrink: 0;
+  gap: 8px;
+  margin-top: auto;
 }
 
 .sample-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   font-size: 0.78rem;
   font-weight: 600;
-  padding: 6px 12px;
+  padding: 8px 12px;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 0.15s;
+  transition: all 0.15s;
   text-decoration: none;
   border: none;
 }
@@ -913,6 +917,7 @@ tr:hover td {
 .sample-btn.try {
   background: var(--color-blue-600);
   color: white;
+  flex: 1;
 }
 
 .sample-btn.try:hover {
@@ -952,7 +957,7 @@ tr:hover td {
     grid-template-columns: 1fr;
   }
 
-  .sample-item {
+  .sample-card {
     flex-direction: column;
     align-items: flex-start;
   }
