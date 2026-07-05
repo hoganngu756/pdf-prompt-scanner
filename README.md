@@ -1,62 +1,77 @@
 # PDF Prompt Scanner
 
-PDF Prompt Scanner is a full-stack web application developed to detect hidden instructions or prompt injections inside PDF documents that could jailbreak AI systems. It supports both static heuristic detection (powered by a SQLite-backed custom rule engine) and AI-driven deep content analysis (powered by the Gemini API).
+PDF Prompt Scanner is a full-stack security-auditing web application developed to detect hidden instructions, visual obfuscations, or prompt injections inside PDF documents that could hijack or jailbreak downstream LLM AI systems.
 
-## Features
+It combines static heuristic analysis (custom SQLite-backed rules), computer-vision visual obfuscation audits (for invisible white text or tiny text), and deep AI context scanning (powered by the Gemini API) to ensure documents are safe for consumption by AI models.
 
-- **Upload and Scan:** Upload a PDF file to analyze its text context for malicious instructions or prompt injection patterns.
-- **Visual Preview:** Generates a dynamic visual page preview of the PDF, highlighting flagged words inline.
-- **Custom Heuristics Rules Manager:** Create, update, toggle, or delete detection rules directly from the web interface. Rules support regular expressions (regex) or plain text phrases (which tolerate punctuation, zero-width spaces, and whitespace obfuscation).
-- **AI Context Analysis:** Leverages Gemini to perform deep context audits on extracted document text to identify semantic jailbreak vectors.
-- **History Log:** View the result logs, details, and timestamps of all past scans.
+---
 
-## Install
+## Key Features
 
-### Standard Install
-Clone the repository:
+- **Multi-layered Scanner**:
+  - **Visual Obfuscation Audit**: Checks for stealthy injection attempts such as text rendered in white-on-white/near-white color or written in extremely small font sizes (`< 3.0pt`).
+  - **Static Heuristics Engine**: Performs regex and literal phrase checks against a database of known injection patterns (punctuation-insensitive, zero-width space, and whitespace tolerant).
+  - **AI Context Analysis**: Leverages the Gemini API to analyze document semantic intent and detect jailbreak patterns or hidden overrides.
+- **Inline PDF Preview Highlighter**: Generates high-resolution PDF page previews, rendering interactive yellow highlights over any flagged phrases, white-on-white text, or tiny text.
+- **Scan Option Tooltips**: Hover cards explaining the scan mechanics of each check directly within the upload zone.
+- **Preloaded Examples & Bad PDFs**: Built-in visual cards in the main dashboard for loading and scanning standard injection scenarios (Instruction Overrides, Role Hijacking, Data Exfiltration, Context Manipulation, and Visual Obfuscation) along with safe documents for reference.
+- **Heuristics Rules Manager**: Edit, create, delete, or toggle heuristic rules (literal or regex) directly from the UI.
+- **History Logs**: Retain, search, and audit past scanning details, flags, dates, and AI analysis reports.
+
+---
+
+## Architecture & Technology Stack
+
+- **Frontend**: React, Vite, TypeScript, Vanilla CSS (Light SaaS Design), Lucide icons.
+- **Backend**: Spring Boot 3 (Java 21), Apache PDFBox 3.0.3 (text extraction, graphics color parsing, page highlight injection), Tess4J (OCR analysis of embedded images).
+- **Database**: SQLite (local persistence of rules and scan history via JPA/Hibernate).
+
+---
+
+## Local Setup & Installation
+
+### 1. Clone the Repository
 ```bash
 git clone https://github.com/hoganngu756/pdf-prompt-scanner.git
 cd pdf-prompt-scanner
 ```
 
-### Setup Dependencies
-The application requires dependencies for both the Java Spring Boot backend and the React Vite frontend.
-
-**Backend (Java/Spring Boot):**
-The backend uses Maven wrapper. You only need Java 21+ installed on your machine.
+### 2. Backend Setup (Java 21)
+Build and run the Maven project:
 ```bash
 cd backend
 ./mvnw clean install
+./mvnw spring-boot:run
 ```
+The backend server runs locally at `http://localhost:8080`.
 
-**Frontend (React/Vite):**
-The frontend requires Node.js and npm.
+### 3. Frontend Setup (Node.js & npm)
+Install dependencies and start the development server:
 ```bash
 cd frontend
 npm install
-```
-
-## Getting Started
-
-Start the backend and frontend servers in separate terminal windows.
-
-To start the backend server:
-```bash
-cd backend
-./mvnw spring-boot:run
-```
-
-To start the frontend server:
-```bash
-cd frontend
 npm run dev
 ```
+The frontend application will start locally at `http://localhost:5173`.
 
-## Usage
+---
 
-1. Open your browser and go to `http://localhost:5173`.
-2. Select your PDF file in the upload zone.
-3. Configure your scanning options (Heuristic Scan, LLM AI Analysis, or both).
-4. Click "Analyze Document".
-5. Go to the "Rules" tab to manage the active detection words and regex patterns used by the heuristic scanner.
-6. Check the "History" tab to review previous scan logs.
+## Deployment
+
+The application is architected to be easily deployed to production cloud platforms.
+
+### Frontend Deployment (Vercel)
+The React/Vite frontend includes a `vercel.json` rewrite routing structure for single-page applications. 
+1. Push your repository to GitHub.
+2. Link your repository to a new project in **Vercel**.
+3. Set the production environment variable:
+   - `VITE_API_BASE_URL`: The URL of your deployed backend service (e.g., `https://api-promptscanner.onrender.com/api`).
+4. Vercel will deploy the application automatically.
+
+### Backend Deployment (Docker Container)
+The backend service includes a multi-stage `Dockerfile` that packages the JRE alongside the system-level Tesseract OCR engine and English training datasets.
+1. Deploy the backend directory to any container-hosting platform (e.g., **Render**, **Fly.io**, **Railway**, or **Google Cloud Run**).
+2. Ensure you allocate persistent disk storage or configure database environment variables if you wish to persist the SQLite rules database across container restarts.
+3. Configure the following environment variables if needed:
+   - `SPRING_DATASOURCE_URL`: Custom database location or connection string.
+   - `GEMINI_API_KEY`: API key for the Gemini AI Scanner.
