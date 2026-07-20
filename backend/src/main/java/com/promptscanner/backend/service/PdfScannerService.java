@@ -48,6 +48,9 @@ public class PdfScannerService {
     @Value("${ocr.tessdata.path:}")
     private String tessDataPath;
 
+    @Value("${app.scan.max-pages:50}")
+    private int maxPages;
+
     // Use ThreadLocal to cache Tesseract instances across requests safely
     private ThreadLocal<Tesseract> tesseractThreadLocal;
 
@@ -100,6 +103,9 @@ public class PdfScannerService {
         }
 
         try (PDDocument document = Loader.loadPDF(file.getBytes())) {
+            if (document.getNumberOfPages() > maxPages) {
+                throw new IllegalArgumentException("PDF exceeds maximum allowed page count of " + maxPages + " pages (found " + document.getNumberOfPages() + ").");
+            }
             
             // Map of pageIndex -> list of rectangles to highlight
             Map<Integer, List<PDRectangle>> highlightsPerPage = new HashMap<>();

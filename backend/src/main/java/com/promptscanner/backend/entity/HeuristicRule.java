@@ -13,12 +13,12 @@ public class HeuristicRule {
     @Column(nullable = false)
     private String phrase;
 
-    private boolean isRegex;
-    private boolean isActive;
+    private Boolean isRegex;
+    private Boolean isActive;
 
     public HeuristicRule() {}
 
-    public HeuristicRule(String phrase, boolean isRegex, boolean isActive) {
+    public HeuristicRule(String phrase, Boolean isRegex, Boolean isActive) {
         this.phrase = phrase;
         this.isRegex = isRegex;
         this.isActive = isActive;
@@ -41,18 +41,26 @@ public class HeuristicRule {
     }
 
     public boolean isRegex() {
-        return isRegex;
+        return isRegex != null && isRegex;
     }
 
-    public void setRegex(boolean regex) {
+    public void setRegex(Boolean regex) {
         isRegex = regex;
     }
 
     public boolean isActive() {
+        return isActive != null && isActive;
+    }
+
+    public void setActive(Boolean active) {
+        isActive = active;
+    }
+
+    public Boolean getIsActive() {
         return isActive;
     }
 
-    public void setActive(boolean active) {
-        isActive = active;
+    public Boolean getIsRegex() {
+        return isRegex;
     }
 }

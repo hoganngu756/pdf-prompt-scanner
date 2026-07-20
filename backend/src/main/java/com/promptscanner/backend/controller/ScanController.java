@@ -19,7 +19,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api")
-@CrossOrigin(origins = "*") // Allow frontend deployment domain
 public class ScanController {
 
     private static final Logger log = LoggerFactory.getLogger(ScanController.class);
@@ -126,6 +125,9 @@ public class ScanController {
             scanRecordRepository.save(record);
 
             return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            response.setError(e.getMessage());
+            return ResponseEntity.badRequest().body(response);
         } catch (Exception e) {
             throw new RuntimeException("Failed to process the PDF file", e);
         }
@@ -143,9 +145,13 @@ public class ScanController {
         if (rule.getPhrase() == null || rule.getPhrase().trim().isEmpty()) {
             return ResponseEntity.badRequest().build();
         }
-        // Force active by default if not set
-        if (!rule.isActive()) {
+        // Default active to true only if not provided
+        if (rule.getIsActive() == null) {
             rule.setActive(true);
+        }
+        // Default isRegex to false if not provided
+        if (rule.getIsRegex() == null) {
+            rule.setRegex(false);
         }
         return ResponseEntity.ok(heuristicRuleRepository.save(rule));
     }

@@ -1,6 +1,6 @@
 # PDF Prompt Scanner
 
-🚀 **Live Deployment**: [pdf-prompt-scanner.vercel.app](https://pdf-prompt-scanner.vercel.app)  
+**Live Deployment**: [pdf-prompt-scanner.vercel.app](https://pdf-prompt-scanner.vercel.app)  
 *(Note: The backend is hosted on Render's free tier. The first scan may take up to 50 seconds to wake up the server).*
 
 PDF Prompt Scanner is a full-stack security-auditing web application developed to detect hidden instructions, visual obfuscations, or prompt injections inside PDF documents that could hijack or jailbreak downstream LLM AI systems.

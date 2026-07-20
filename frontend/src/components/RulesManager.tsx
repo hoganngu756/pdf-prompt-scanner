@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings, Plus, Trash2, Edit2, Save, X, ToggleLeft, ToggleRight, HelpCircle } from 'lucide-react';
+import { Settings, Plus, Trash2, Edit2, Save, X, ToggleLeft, ToggleRight, HelpCircle, Key } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { HeuristicRule } from '../types';
 
@@ -16,6 +16,38 @@ export default function RulesManager() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editPhrase, setEditPhrase] = useState('');
   const [editIsRegex, setEditIsRegex] = useState(false);
+
+  // Admin access key storage
+  const [adminKey, setAdminKey] = useState(() => localStorage.getItem('pdf_promptscanner_admin_key') || '');
+
+  const handleAdminKeyChange = (val: string) => {
+    setAdminKey(val);
+    localStorage.setItem('pdf_promptscanner_admin_key', val);
+  };
+
+  const getHeaders = (extraHeaders: Record<string, string> = {}) => {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...extraHeaders
+    };
+    if (adminKey.trim()) {
+      headers['X-Admin-Api-Key'] = adminKey.trim();
+    }
+    return headers;
+  };
+
+  const handleResponseError = async (response: Response, fallbackMessage: string) => {
+    if (response.status === 401) {
+      toast.error('Unauthorized: Please enter a valid Admin API Key in the settings field below.');
+      return;
+    }
+    try {
+      const data = await response.json();
+      toast.error(data.error || fallbackMessage);
+    } catch {
+      toast.error(fallbackMessage);
+    }
+  };
 
   const fetchRules = async () => {
     try {
@@ -46,15 +78,18 @@ export default function RulesManager() {
     try {
       const response = await fetch(`${API_BASE_URL}/rules`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify({
           phrase: newPhrase.trim(),
-          regex: newIsRegex,
+          isRegex: newIsRegex,
           active: true
         })
       });
 
-      if (!response.ok) throw new Error('Failed to create rule');
+      if (!response.ok) {
+        await handleResponseError(response, 'Failed to create rule');
+        return;
+      }
       
       const newRule = await response.json();
       setRules(prev => [...prev, newRule]);
@@ -73,15 +108,18 @@ export default function RulesManager() {
     try {
       const response = await fetch(`${API_BASE_URL}/rules/${rule.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify({
           phrase: rule.phrase,
-          regex: rule.isRegex,
+          isRegex: rule.isRegex,
           active: !rule.active
         })
       });
 
-      if (!response.ok) throw new Error('Failed to update rule');
+      if (!response.ok) {
+        await handleResponseError(response, 'Failed to update rule status');
+        return;
+      }
       const updatedRule = await response.json();
       setRules(prev => prev.map(r => r.id === rule.id ? updatedRule : r));
       toast.success(`Rule ${updatedRule.active ? 'enabled' : 'disabled'}`);
@@ -96,10 +134,14 @@ export default function RulesManager() {
 
     try {
       const response = await fetch(`${API_BASE_URL}/rules/${id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: getHeaders()
       });
 
-      if (!response.ok) throw new Error('Failed to delete rule');
+      if (!response.ok) {
+        await handleResponseError(response, 'Failed to delete rule');
+        return;
+      }
       setRules(prev => prev.filter(r => r.id !== id));
       toast.success('Rule deleted successfully');
     } catch (err) {
@@ -129,15 +171,18 @@ export default function RulesManager() {
     try {
       const response = await fetch(`${API_BASE_URL}/rules/${ruleId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify({
           phrase: editPhrase.trim(),
-          regex: editIsRegex,
+          isRegex: editIsRegex,
           active: currentActive
         })
       });
 
-      if (!response.ok) throw new Error('Failed to save rule updates');
+      if (!response.ok) {
+        await handleResponseError(response, 'Failed to save rule updates');
+        return;
+      }
       const updatedRule = await response.json();
       setRules(prev => prev.map(r => r.id === ruleId ? updatedRule : r));
       cancelEdit();
@@ -155,6 +200,42 @@ export default function RulesManager() {
           <Settings size={18} />
           Heuristics Rules
         </h2>
+
+        {/* Admin Secret Configuration Section */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          backgroundColor: 'var(--color-gray-50)',
+          border: '1px solid var(--color-gray-200)',
+          padding: '16px',
+          borderRadius: 'var(--radius-md)',
+          marginBottom: '20px'
+        }}>
+          <label htmlFor="admin-key" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-gray-600)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+            <Key size={14} />
+            Admin Authorization Key
+          </label>
+          <input 
+            id="admin-key"
+            type="password" 
+            placeholder="Enter Admin API Key to modify rules"
+            value={adminKey}
+            onChange={e => handleAdminKeyChange(e.target.value)}
+            style={{
+              padding: '9px 12px',
+              border: '1px solid var(--color-gray-300)',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: '0.875rem',
+              width: '100%',
+              maxWidth: '350px',
+              fontFamily: 'monospace'
+            }}
+          />
+          <span style={{ fontSize: '0.75rem', color: 'var(--color-gray-400)' }}>
+            Required for adding, editing, deleting, or toggling heuristic rules on the server.
+          </span>
+        </div>
 
         <form onSubmit={handleAddRule} className="rule-form">
           <div className="form-row">
