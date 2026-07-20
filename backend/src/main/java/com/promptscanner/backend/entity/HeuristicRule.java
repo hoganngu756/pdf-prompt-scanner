@@ -1,5 +1,6 @@
 package com.promptscanner.backend.entity;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 
 @Entity
@@ -13,7 +14,10 @@ public class HeuristicRule {
     @Column(nullable = false)
     private String phrase;
 
+    @JsonProperty("isRegex")
     private Boolean isRegex;
+
+    @JsonProperty("active")
     private Boolean isActive;
 
     public HeuristicRule() {}

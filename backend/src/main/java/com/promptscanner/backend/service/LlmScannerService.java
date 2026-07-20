@@ -1,5 +1,7 @@
 package com.promptscanner.backend.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.promptscanner.backend.dto.ScanResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
@@ -19,11 +21,16 @@ public class LlmScannerService {
 
     private static final Logger log = LoggerFactory.getLogger(LlmScannerService.class);
 
-    // We'll get the API key from application.properties
     @Value("${gemini.api.key:}")
     private String geminiApiKey;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
+    private final ObjectMapper objectMapper;
+
+    public LlmScannerService(RestTemplate restTemplate, ObjectMapper objectMapper) {
+        this.restTemplate = restTemplate;
+        this.objectMapper = objectMapper;
+    }
 
     public ScanResponse.LlmResult scan(String text) {
         if (text == null || text.trim().isEmpty()) {
@@ -53,7 +60,7 @@ public class LlmScannerService {
                     "contents", List.of(
                             Map.of("parts", List.of(
                                     Map.of("text", prompt)
-                            ))
+                             ))
                     ),
                     "systemInstruction", Map.of(
                             "parts", List.of(
@@ -77,21 +84,25 @@ public class LlmScannerService {
             headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
+            @SuppressWarnings("rawtypes")
             ResponseEntity<Map> response = restTemplate.postForEntity(url, entity, Map.class);
             
             // Basic parsing of Gemini response
+            @SuppressWarnings("unchecked")
             Map<String, Object> body = response.getBody();
             if (body != null && body.containsKey("candidates")) {
+                @SuppressWarnings("unchecked")
                 List<Map<String, Object>> candidates = (List<Map<String, Object>>) body.get("candidates");
                 if (!candidates.isEmpty()) {
+                    @SuppressWarnings("unchecked")
                     Map<String, Object> content = (Map<String, Object>) candidates.get(0).get("content");
+                    @SuppressWarnings("unchecked")
                     List<Map<String, Object>> parts = (List<Map<String, Object>>) content.get("parts");
                     if (!parts.isEmpty()) {
                         String llmResponseJsonStr = (String) parts.get(0).get("text");
                         
                         // Parse the JSON string from the LLM
-                        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                        Map<String, String> llmResponse = mapper.readValue(llmResponseJsonStr, Map.class);
+                        Map<String, String> llmResponse = objectMapper.readValue(llmResponseJsonStr, new TypeReference<Map<String, String>>() {});
                         
                         boolean isSafe = "SAFE".equals(llmResponse.get("status"));
                         return new ScanResponse.LlmResult(isSafe, llmResponse.get("reason"));

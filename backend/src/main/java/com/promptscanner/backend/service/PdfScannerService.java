@@ -8,8 +8,6 @@ import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.graphics.blend.BlendMode;
 import org.apache.pdfbox.pdmodel.graphics.state.PDExtendedGraphicsState;
 import org.apache.pdfbox.rendering.PDFRenderer;
-import org.apache.pdfbox.text.PDFTextStripper;
-import org.apache.pdfbox.text.TextPosition;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import net.sourceforge.tess4j.Tesseract;
@@ -25,18 +23,12 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Base64;
-import java.util.HashMap;
-import java.util.List;
-import com.promptscanner.backend.entity.HeuristicRule;
-import com.promptscanner.backend.repository.HeuristicRuleRepository;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.apache.pdfbox.contentstream.operator.color.SetNonStrokingColor;
-import org.apache.pdfbox.contentstream.operator.color.SetNonStrokingColorSpace;
-import org.apache.pdfbox.contentstream.operator.color.SetNonStrokingDeviceCMYKColor;
-import org.apache.pdfbox.contentstream.operator.color.SetNonStrokingDeviceGrayColor;
-import org.apache.pdfbox.contentstream.operator.color.SetNonStrokingDeviceRGBColor;
+import com.promptscanner.backend.entity.HeuristicRule;
+import com.promptscanner.backend.repository.HeuristicRuleRepository;
 
 @Service
 public class PdfScannerService {
@@ -76,15 +68,13 @@ public class PdfScannerService {
         });
     }
 
-    public static class PdfData {
-        public String extractedText;
-        public List<String> previewImagesBase64 = new ArrayList<>();
-        public List<String> visualObfuscationFindings = new ArrayList<>();
-    }
+    public record PdfData(
+        String extractedText,
+        List<String> previewImagesBase64,
+        List<String> visualObfuscationFindings
+    ) {}
 
     public PdfData processPdf(MultipartFile file) throws IOException {
-        PdfData data = new PdfData();
-
         // Build active highlight words dynamically
         List<HeuristicRule> activeRules = heuristicRuleRepository.findByIsActiveTrue();
         Set<String> highlightWords = new HashSet<>();
@@ -102,141 +92,20 @@ public class PdfScannerService {
             highlightWords.addAll(List.of("ignore", "previous", "instructions", "system", "message", "prompt", "bypass"));
         }
 
+        List<String> previewImagesBase64 = new ArrayList<>();
+        String extractedTextContent;
+        List<String> visualObfuscationFindings;
+
         try (PDDocument document = Loader.loadPDF(file.getBytes())) {
             if (document.getNumberOfPages() > maxPages) {
                 throw new IllegalArgumentException("PDF exceeds maximum allowed page count of " + maxPages + " pages (found " + document.getNumberOfPages() + ").");
             }
             
-            // Map of pageIndex -> list of rectangles to highlight
-            Map<Integer, List<PDRectangle>> highlightsPerPage = new HashMap<>();
-
-            PDFTextStripper stripper = new PDFTextStripper() {
-                private int currentPageIndex = 0;
-                private final Map<TextPosition, float[]> characterColors = new java.util.IdentityHashMap<>();
-
-                {
-                    addOperator(new SetNonStrokingColor(this));
-                    addOperator(new SetNonStrokingColorSpace(this));
-                    addOperator(new SetNonStrokingDeviceCMYKColor(this));
-                    addOperator(new SetNonStrokingDeviceGrayColor(this));
-                    addOperator(new SetNonStrokingDeviceRGBColor(this));
-                }
-
-                @Override
-                protected void startPage(PDPage page) throws IOException {
-                    super.startPage(page);
-                    // PDFBox pages are 1-indexed in PDFTextStripper getCurrentPageNo()
-                    currentPageIndex = getCurrentPageNo() - 1;
-                }
-
-                @Override
-                protected void processTextPosition(TextPosition text) {
-                    super.processTextPosition(text);
-                    org.apache.pdfbox.pdmodel.graphics.color.PDColor color = getGraphicsState().getNonStrokingColor();
-                    if (color != null && color.getColorSpace() != null) {
-                        try {
-                            float[] rgb = color.getColorSpace().toRGB(color.getComponents());
-                            characterColors.put(text, rgb);
-                        } catch (Exception e) {
-                            // ignore
-                        }
-                    }
-                }
-
-                @Override
-                protected void writeString(String text, List<TextPosition> textPositions) throws IOException {
-                    super.writeString(text, textPositions);
-                    
-                    boolean isWhiteText = false;
-                    int whiteCount = 0;
-                    for (TextPosition tp : textPositions) {
-                        float[] rgb = characterColors.get(tp);
-                        if (rgb != null && rgb.length >= 3) {
-                            if (rgb[0] > 0.97f && rgb[1] > 0.97f && rgb[2] > 0.97f) {
-                                whiteCount++;
-                            }
-                        }
-                    }
-                    if (!textPositions.isEmpty() && whiteCount >= textPositions.size() * 0.8) {
-                        isWhiteText = true;
-                    }
-
-                    boolean hasTinyText = false;
-                    float minSizeFound = Float.MAX_VALUE;
-                    for (TextPosition tp : textPositions) {
-                        float size = tp.getFontSizeInPt();
-                        if (size > 0 && size < 3.0f) {
-                            hasTinyText = true;
-                            if (size < minSizeFound) {
-                                minSizeFound = size;
-                            }
-                        }
-                    }
-
-                    if (isWhiteText || hasTinyText) {
-                        String trimmedText = text.trim();
-                        if (!trimmedText.isEmpty()) {
-                            String finding = "";
-                            if (isWhiteText && hasTinyText) {
-                                finding = String.format("Page %d: White & tiny text (size %.1fpt): '%s'", getCurrentPageNo(), minSizeFound, trimmedText);
-                            } else if (isWhiteText) {
-                                finding = String.format("Page %d: Invisible/white text: '%s'", getCurrentPageNo(), trimmedText);
-                            } else {
-                                finding = String.format("Page %d: Tiny text (size %.1fpt): '%s'", getCurrentPageNo(), minSizeFound, trimmedText);
-                            }
-                            data.visualObfuscationFindings.add(finding);
-
-                            float minX = Float.MAX_VALUE;
-                            float minY = Float.MAX_VALUE;
-                            float maxX = Float.MIN_VALUE;
-                            float maxY = Float.MIN_VALUE;
-                            
-                            for (TextPosition tp : textPositions) {
-                                if (tp.getXDirAdj() < minX) minX = tp.getXDirAdj();
-                                if (tp.getYDirAdj() < minY) minY = tp.getYDirAdj() - tp.getHeightDir();
-                                if (tp.getXDirAdj() + tp.getWidthDirAdj() > maxX) maxX = tp.getXDirAdj() + tp.getWidthDirAdj();
-                                if (tp.getYDirAdj() > maxY) maxY = tp.getYDirAdj();
-                            }
-                            
-                            PDRectangle rect = new PDRectangle();
-                            rect.setLowerLeftX(minX);
-                            rect.setLowerLeftY(minY);
-                            rect.setUpperRightX(maxX);
-                            rect.setUpperRightY(maxY + 2);
-                            
-                            highlightsPerPage.computeIfAbsent(currentPageIndex, k -> new ArrayList<>()).add(rect);
-                        }
-                    }
-
-                    String lowerText = text.toLowerCase();
-                    for (String word : highlightWords) {
-                        if (lowerText.contains(word)) {
-                            float minX = Float.MAX_VALUE;
-                            float minY = Float.MAX_VALUE;
-                            float maxX = Float.MIN_VALUE;
-                            float maxY = Float.MIN_VALUE;
-                            
-                            for (TextPosition tp : textPositions) {
-                                if (tp.getXDirAdj() < minX) minX = tp.getXDirAdj();
-                                if (tp.getYDirAdj() < minY) minY = tp.getYDirAdj() - tp.getHeightDir();
-                                if (tp.getXDirAdj() + tp.getWidthDirAdj() > maxX) maxX = tp.getXDirAdj() + tp.getWidthDirAdj();
-                                if (tp.getYDirAdj() > maxY) maxY = tp.getYDirAdj();
-                            }
-                            
-                            PDRectangle rect = new PDRectangle();
-                            rect.setLowerLeftX(minX);
-                            rect.setLowerLeftY(minY);
-                            rect.setUpperRightX(maxX);
-                            rect.setUpperRightY(maxY + 2);
-                            
-                            highlightsPerPage.computeIfAbsent(currentPageIndex, k -> new ArrayList<>()).add(rect);
-                            break;
-                        }
-                    }
-                }
-            };
+            HighlightingTextStripper stripper = new HighlightingTextStripper(highlightWords);
             stripper.setSortByPosition(true);
-            data.extractedText = stripper.getText(document);
+            extractedTextContent = stripper.getText(document);
+            visualObfuscationFindings = stripper.getVisualObfuscationFindings();
+            Map<Integer, List<PDRectangle>> highlightsPerPage = stripper.getHighlightsPerPage();
 
             StringBuilder ocrText = new StringBuilder();
             Tesseract tesseract = tesseractThreadLocal.get();
@@ -270,7 +139,7 @@ public class PdfScannerService {
 
             if (ocrText.length() > 0) {
                 log.debug("Extracted OCR Text length: {}", ocrText.length());
-                data.extractedText += "\n\n--- OCR EXTRACTED TEXT ---\n" + ocrText.toString();
+                extractedTextContent += "\n\n--- OCR EXTRACTED TEXT ---\n" + ocrText.toString();
             }
 
             // Determine which pages to render (pages with highlights, or just the first page if none)
@@ -318,10 +187,10 @@ public class PdfScannerService {
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 ImageIO.write(bim, "png", baos);
                 byte[] imageBytes = baos.toByteArray();
-                data.previewImagesBase64.add("data:image/png;base64," + Base64.getEncoder().encodeToString(imageBytes));
+                previewImagesBase64.add("data:image/png;base64," + Base64.getEncoder().encodeToString(imageBytes));
             }
         }
 
-        return data;
+        return new PdfData(extractedTextContent, previewImagesBase64, visualObfuscationFindings);
     }
 }
