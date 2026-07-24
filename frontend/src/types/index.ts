@@ -18,6 +18,8 @@ export interface ScanRecord {
 export interface HeuristicResult {
   safe: boolean;
   flags: string[];
+  /** Rules the document was actually checked against. Zero means the engine is not configured. */
+  activeRuleCount?: number;
 }
 
 export interface LlmResult {

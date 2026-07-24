@@ -31,7 +31,9 @@
   --color-red-700: #b91c1c;
 
   --color-amber-50: #fffbeb;
+  --color-amber-100: #fef3c7;
   --color-amber-600: #d97706;
+  --color-amber-700: #b45309;
 
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
@@ -412,6 +414,11 @@ header h1.main-logo {
   background: var(--color-red-50);
 }
 
+.result-card.warning {
+  border-left: 3px solid var(--color-amber-600);
+  background: var(--color-amber-50);
+}
+
 .result-header {
   display: flex;
   justify-content: space-between;
@@ -449,6 +456,11 @@ header h1.main-logo {
 .badge.danger {
   background-color: var(--color-red-100);
   color: var(--color-red-700);
+}
+
+.badge.warning {
+  background-color: var(--color-amber-100);
+  color: var(--color-amber-700);
 }
 
 .result-content {

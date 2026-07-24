@@ -123,31 +123,44 @@ export default function ResultsDashboard({ results, loading }: ResultsDashboardP
             </div>
           )}
 
-          {results.heuristicResult && (
-            <div className={`result-card ${results.heuristicResult.safe ? 'safe' : 'danger'}`}>
-              <div className="result-header">
-                <h3>
-                  <ShieldAlert size={16} />
-                  Heuristic Engine
-                </h3>
-                <span className={`badge ${results.heuristicResult.safe ? 'safe' : 'danger'}`}>
-                  {results.heuristicResult.safe ? <CheckCircle size={12} /> : <AlertTriangle size={12} />}
-                  {results.heuristicResult.safe ? 'Secure' : 'Flagged'}
-                </span>
+          {results.heuristicResult && (() => {
+            // activeRuleCount === 0 means the engine ran with no rules, so it
+            // checked nothing. That is a configuration warning, not a verdict.
+            const notConfigured = results.heuristicResult.activeRuleCount === 0;
+            const state = notConfigured ? 'warning' : results.heuristicResult.safe ? 'safe' : 'danger';
+            const label = notConfigured ? 'Not configured' : results.heuristicResult.safe ? 'Secure' : 'Flagged';
+
+            return (
+              <div className={`result-card ${state}`}>
+                <div className="result-header">
+                  <h3>
+                    <ShieldAlert size={16} />
+                    Heuristic Engine
+                  </h3>
+                  <span className={`badge ${state}`}>
+                    {state === 'safe' ? <CheckCircle size={12} /> : <AlertTriangle size={12} />}
+                    {label}
+                  </span>
+                </div>
+                <div className="result-content">
+                  {!results.heuristicResult.safe ? (
+                    <ul>
+                      {results.heuristicResult.flags?.map((flag, idx) => (
+                        <li key={idx}>{flag}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p>
+                      No known malicious patterns detected
+                      {results.heuristicResult.activeRuleCount
+                        ? ` (checked against ${results.heuristicResult.activeRuleCount} active rule${results.heuristicResult.activeRuleCount === 1 ? '' : 's'}).`
+                        : '.'}
+                    </p>
+                  )}
+                </div>
               </div>
-              <div className="result-content">
-                {!results.heuristicResult.safe ? (
-                  <ul>
-                    {results.heuristicResult.flags?.map((flag, idx) => (
-                      <li key={idx}>{flag}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p>No known malicious patterns detected.</p>
-                )}
-              </div>
-            </div>
-          )}
+            );
+          })()}
 
           {results.llmResult && (
             <div className={`result-card ${results.llmResult.safe ? 'safe' : 'danger'}`}>
