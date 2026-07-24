@@ -29,17 +29,26 @@ public class ScanResponse {
     public static class HeuristicResult {
         private boolean safe;
         private List<String> flags;
+        private int activeRuleCount;
 
         public HeuristicResult() {}
         public HeuristicResult(boolean safe, List<String> flags) {
+            this(safe, flags, 0);
+        }
+        public HeuristicResult(boolean safe, List<String> flags, int activeRuleCount) {
             this.safe = safe;
             this.flags = flags;
+            this.activeRuleCount = activeRuleCount;
         }
 
         public boolean isSafe() { return safe; }
         public void setSafe(boolean safe) { this.safe = safe; }
         public List<String> getFlags() { return flags; }
         public void setFlags(List<String> flags) { this.flags = flags; }
+
+        /** Number of active rules the document was actually checked against. Zero means the engine did nothing. */
+        public int getActiveRuleCount() { return activeRuleCount; }
+        public void setActiveRuleCount(int activeRuleCount) { this.activeRuleCount = activeRuleCount; }
     }
 
     public static class LlmResult {

@@ -27,9 +27,9 @@ public class BackendApplication {
 						new HeuristicRule("system prompt", false, true),
 						new HeuristicRule("do not follow the rules", false, true),
 						new HeuristicRule("forget everything", false, true),
-						new HeuristicRule("bypass", false, true),
+						new HeuristicRule("bypass all restrictions", false, true),
 						new HeuristicRule("new instructions", false, true),
-						new HeuristicRule("act as a", false, true),
+						new HeuristicRule("developer mode", false, true),
 						new HeuristicRule("jailbreak", false, true)
 				);
 				repository.saveAll(defaultRules);

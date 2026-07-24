@@ -26,14 +26,22 @@ public class AdminApiKeyInterceptor implements HandlerInterceptor {
         }
 
         String apiKeyHeader = request.getHeader("X-Admin-Api-Key");
-        
+
+        // Fail closed: an unconfigured key must never leave rule management open
+        // to anonymous callers, since deleting every rule silently disables the
+        // heuristic engine.
         if (adminApiKey == null || adminApiKey.trim().isEmpty() || "default-admin-key".equals(adminApiKey)) {
-            log.warn("Admin API Key is default or empty. Allowing request. Please set ADMIN_API_KEY in environment.");
-            return true;
+            log.error("Admin API Key is unset or still the default. Rejecting {} {}. Set ADMIN_API_KEY in the environment to enable rule management.",
+                    method, request.getRequestURI());
+            response.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
+            response.setContentType("application/json");
+            response.getWriter().write("{\"error\": \"Rule management is disabled: the server has no ADMIN_API_KEY configured.\"}");
+            return false;
         }
 
         if (apiKeyHeader == null || !adminApiKey.equals(apiKeyHeader)) {
-            log.warn("Unauthorized request to {}: API Key mismatch or missing. Header: {}", request.getRequestURI(), apiKeyHeader);
+            log.warn("Unauthorized request to {}: API Key {}.", request.getRequestURI(),
+                    apiKeyHeader == null ? "missing" : "mismatch");
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setContentType("application/json");
             response.getWriter().write("{\"error\": \"Unauthorized. Valid X-Admin-Api-Key header is required.\"}");
