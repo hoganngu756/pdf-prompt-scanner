@@ -22,8 +22,8 @@ export default function ResultsDashboard({ results, loading }: ResultsDashboardP
       </h2>
       
       {!results && !loading && (
-        <div style={{ color: '#9ca3af', textAlign: 'center', padding: '48px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-          <FileSearch size={40} color="#e5e7eb" />
+        <div className="empty-state">
+          <FileSearch size={40} />
           <p>Upload a document to see results here.</p>
         </div>
       )}
@@ -31,7 +31,7 @@ export default function ResultsDashboard({ results, loading }: ResultsDashboardP
       {results?.error && (
         <div className="result-card danger">
           <div className="result-header">
-            <h3><AlertTriangle size={16} color="#dc2626" /> Scan Error</h3>
+            <h3><AlertTriangle size={16} /> Scan Error</h3>
           </div>
           <div className="result-content">{results.error}</div>
         </div>
@@ -46,7 +46,7 @@ export default function ResultsDashboard({ results, loading }: ResultsDashboardP
                 <div className="preview-container">
                   <div className="preview-header">
                     <h3><FileSearch size={15} /> Document Preview</h3>
-                    <span style={{ fontSize: '0.8rem', color: '#9ca3af', fontWeight: 500 }}>
+                    <span className="preview-count">
                       Page {currentIndex + 1} of {previewImages.length}
                     </span>
                   </div>

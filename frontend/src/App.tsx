@@ -98,23 +98,32 @@ function App() {
 
   return (
     <div className="app-container">
-      <Toaster 
+      <Toaster
         position="top-right"
         toastOptions={{
           style: {
-            background: '#ffffff',
-            color: '#111827',
-            border: '1px solid #e5e7eb',
-            fontSize: '0.875rem'
+            background: 'var(--surface-card)',
+            color: 'var(--text-primary)',
+            border: '1px solid var(--border-default)',
+            fontSize: 'var(--text-base)'
           }
-        }} 
+        }}
       />
       <Header activeTab={activeTab} setActiveTab={setActiveTab} />
 
       {activeTab === 'scan' && (
+        <>
+        <div className="page-header">
+          <h2>Audit a PDF before your AI reads it</h2>
+          <p>
+            Detects hidden instructions, invisible or microscopic text, and jailbreak
+            attempts embedded in documents — the kinds of payloads that hijack an LLM
+            without ever being visible to a human reader.
+          </p>
+        </div>
         <main className="main-content">
           <div>
-            <UploadSection 
+            <UploadSection
               file={file}
               setFile={setFile}
               handleFileChange={handleFileChange}
@@ -126,20 +135,21 @@ function App() {
               handleScan={handleScan}
             />
           </div>
-          <div>
+          <div className="results-aside">
             <ResultsDashboard results={results} loading={loading} />
             {!results && !loading && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <>
                 <div className="card">
                   <WelcomeGuide />
                 </div>
                 <div className="card">
                   <ExamplePdfs onSelectSample={handleSelectSample} />
                 </div>
-              </div>
+              </>
             )}
           </div>
         </main>
+        </>
       )}
 
       {activeTab === 'history' && (

@@ -194,7 +194,7 @@ export default function RulesManager() {
   };
 
   return (
-    <div className="main-content" style={{ gridTemplateColumns: '1fr' }}>
+    <div className="main-content single-column">
       <div className="card">
         <h2 className="card-title">
           <Settings size={18} />
@@ -202,37 +202,19 @@ export default function RulesManager() {
         </h2>
 
         {/* Admin Secret Configuration Section */}
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '8px',
-          backgroundColor: 'var(--color-gray-50)',
-          border: '1px solid var(--color-gray-200)',
-          padding: '16px',
-          borderRadius: 'var(--radius-md)',
-          marginBottom: '20px'
-        }}>
-          <label htmlFor="admin-key" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-gray-600)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+        <div className="admin-key-panel">
+          <label htmlFor="admin-key">
             <Key size={14} />
             Admin Authorization Key
           </label>
-          <input 
+          <input
             id="admin-key"
-            type="password" 
+            type="password"
             placeholder="Enter Admin API Key to modify rules"
             value={adminKey}
             onChange={e => handleAdminKeyChange(e.target.value)}
-            style={{
-              padding: '9px 12px',
-              border: '1px solid var(--color-gray-300)',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: '0.875rem',
-              width: '100%',
-              maxWidth: '350px',
-              fontFamily: 'monospace'
-            }}
           />
-          <span style={{ fontSize: '0.75rem', color: 'var(--color-gray-400)' }}>
+          <span className="field-hint">
             Required for adding, editing, deleting, or toggling heuristic rules on the server.
           </span>
         </div>
@@ -261,7 +243,7 @@ export default function RulesManager() {
                 Regex
               </label>
               <span className="tooltip-info" title="Regex rules match raw patterns. Non-regex rules are auto-expanded to ignore spacing, dots, and common text obfuscation.">
-                <HelpCircle size={14} color="#9ca3af" />
+                <HelpCircle size={14} />
               </span>
             </div>
             <button type="submit" className="btn-primary add-rule-btn" disabled={submitting}>
@@ -272,22 +254,22 @@ export default function RulesManager() {
         </form>
 
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: '#9ca3af' }}>
+          <div className="empty-state">
             Loading rules…
           </div>
         ) : rules.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: '#9ca3af' }}>
+          <div className="empty-state">
             No heuristic rules defined yet.
           </div>
         ) : (
-          <div className="history-table-container" style={{ marginTop: '16px' }}>
+          <div className="history-table-container rules-table">
             <table>
               <thead>
                 <tr>
                   <th>Pattern</th>
                   <th>Type</th>
                   <th>Status</th>
-                  <th style={{ textAlign: 'right' }}>Actions</th>
+                  <th className="cell-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -304,12 +286,12 @@ export default function RulesManager() {
                             onChange={e => setEditPhrase(e.target.value)}
                           />
                         ) : (
-                          <code style={{ fontSize: '0.85rem' }}>{rule.phrase}</code>
+                          <code className="rule-phrase">{rule.phrase}</code>
                         )}
                       </td>
                       <td>
                         {isEditing ? (
-                          <label className="toggle-label" style={{ fontSize: '0.8rem' }}>
+                          <label className="toggle-label">
                             <input 
                               type="checkbox"
                               checked={editIsRegex}
@@ -318,34 +300,24 @@ export default function RulesManager() {
                             Regex
                           </label>
                         ) : (
-                          <span className={`badge ${rule.isRegex ? 'danger' : 'safe'}`} style={{ fontSize: '0.7rem', padding: '2px 8px' }}>
+                          <span className={`badge compact ${rule.isRegex ? 'info' : 'neutral'}`}>
                             {rule.isRegex ? 'Regex' : 'Literal'}
                           </span>
                         )}
                       </td>
                       <td>
-                        <button 
+                        <button
                           onClick={() => handleToggleActive(rule)}
-                          className="status-toggle-btn"
+                          className={`status-toggle-btn ${rule.active ? 'is-active' : ''}`}
                           title={rule.active ? 'Disable rule' : 'Enable rule'}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            color: rule.active ? '#16a34a' : '#9ca3af',
-                            transition: 'color 0.15s'
-                          }}
+                          aria-pressed={rule.active}
                         >
                           {rule.active ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
-                          <span style={{ marginLeft: '6px', fontSize: '0.8rem' }}>
-                            {rule.active ? 'Active' : 'Off'}
-                          </span>
+                          <span>{rule.active ? 'Active' : 'Off'}</span>
                         </button>
                       </td>
-                      <td style={{ textAlign: 'right' }}>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px' }}>
+                      <td className="cell-right">
+                        <div className="rule-actions">
                           {isEditing ? (
                             <>
                               <button onClick={() => handleSaveEdit(rule.id, rule.active)} className="action-icon-btn save" title="Save changes">

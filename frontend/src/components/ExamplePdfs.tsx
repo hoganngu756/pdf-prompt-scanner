@@ -91,9 +91,9 @@ export default function ExamplePdfs({ onSelectSample }: ExamplePdfsProps) {
           <div key={sample.filename} className={`sample-card ${sample.safe ? 'safe' : 'danger'}`}>
             <div className="sample-info">
               <div className="sample-label">
-                {sample.safe 
-                  ? <CheckCircle size={14} color="#16a34a" /> 
-                  : <AlertTriangle size={14} color="#d97706" />
+                {sample.safe
+                  ? <CheckCircle size={14} className="sample-icon safe" />
+                  : <AlertTriangle size={14} className="sample-icon danger" />
                 }
                 <strong>{sample.label}</strong>
                 {!sample.safe && (

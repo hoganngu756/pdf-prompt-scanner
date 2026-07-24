@@ -13,8 +13,8 @@ export default function HistoryTable({ history }: HistoryTableProps) {
         Scan History
       </h2>
       {history.length === 0 ? (
-        <div style={{ color: '#9ca3af', textAlign: 'center', padding: '48px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-          <SearchX size={40} color="#e5e7eb" />
+        <div className="empty-state">
+          <SearchX size={40} />
           <p>No scans have been performed yet.</p>
         </div>
       ) : (
@@ -31,15 +31,15 @@ export default function HistoryTable({ history }: HistoryTableProps) {
             <tbody>
               {history.map(record => (
                 <tr key={record.id}>
-                  <td style={{ whiteSpace: 'nowrap' }}>{new Date(record.scanDate).toLocaleString()}</td>
-                  <td style={{ fontWeight: 500 }}>{record.fileName}</td>
+                  <td className="cell-nowrap">{new Date(record.scanDate).toLocaleString()}</td>
+                  <td className="cell-filename">{record.fileName}</td>
                   <td>
                     <span className={`badge ${record.safe ? 'safe' : 'danger'}`}>
                       {record.safe ? <CheckCircle size={12} /> : <AlertTriangle size={12} />}
                       {record.safe ? 'Secure' : 'Flagged'}
                     </span>
                   </td>
-                  <td style={{ fontSize: '0.85rem', color: '#6b7280', maxWidth: '320px' }}>
+                  <td className="cell-details">
                     {(() => {
                       const details = [];
                       if (record.visualFlags) details.push(`[Visual: ${record.visualFlags}]`);

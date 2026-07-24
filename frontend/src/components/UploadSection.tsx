@@ -56,9 +56,18 @@ export default function UploadSection({
         Upload Document
       </h2>
       
-      <div 
+      <div
         className={`file-drop-zone ${dragActive ? 'active' : ''}`}
+        role="button"
+        tabIndex={0}
+        aria-label={file ? `Selected file ${file.name}. Activate to choose a different PDF.` : 'Choose a PDF file to scan'}
         onClick={() => document.getElementById('file-upload')?.click()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            document.getElementById('file-upload')?.click();
+          }
+        }}
         onDragEnter={handleDrag}
         onDragOver={handleDrag}
         onDragLeave={handleDrag}
@@ -79,7 +88,7 @@ export default function UploadSection({
       </div>
 
       <div className="settings-group">
-        <h4 style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', color: '#6b7280', fontSize: '0.8rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+        <h4 className="settings-group-title">
           <Settings size={14} />
           Scan Options
         </h4>
@@ -91,7 +100,7 @@ export default function UploadSection({
               checked={useHeuristics} 
               onChange={(e) => setUseHeuristics(e.target.checked)} 
             />
-            <ShieldAlert size={16} color={useHeuristics ? "#3b82f6" : "#9ca3af"} />
+            <ShieldAlert size={16} className={`option-icon ${useHeuristics ? 'is-on' : ''}`} />
             Heuristics Scan
           </label>
           <div className="option-tooltip">
@@ -107,7 +116,7 @@ export default function UploadSection({
               checked={useLLM} 
               onChange={(e) => setUseLLM(e.target.checked)} 
             />
-            <Cpu size={16} color={useLLM ? "#3b82f6" : "#9ca3af"} />
+            <Cpu size={16} className={`option-icon ${useLLM ? 'is-on' : ''}`} />
             AI Analysis (Gemini)
           </label>
           <div className="option-tooltip">
@@ -129,7 +138,7 @@ export default function UploadSection({
         )}
       </button>
 
-      <p style={{ fontSize: '0.78rem', color: '#6b7280', textAlign: 'center' }}>
+      <p className="upload-hint">
         First scan may take ~60s if the backend is waking up.
       </p>
     </section>
