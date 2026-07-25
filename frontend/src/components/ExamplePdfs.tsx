@@ -53,6 +53,20 @@ const SAMPLES: SamplePdf[] = [
     safe: false,
   },
   {
+    filename: 'sample_invisible_render.pdf',
+    label: 'Invisible Render Mode',
+    description: 'A compliance attestation hiding instructions with PDF text rendering mode 3 — painted as nothing at all, yet fully extractable by an AI.',
+    attackType: 'Invisible text',
+    safe: false,
+  },
+  {
+    filename: 'sample_metadata_injection.pdf',
+    label: 'Metadata & Annotations',
+    description: 'A resume with injections planted in the PDF Title, Subject, Keywords and a hidden annotation — none of it visible on the page.',
+    attackType: 'Hidden surfaces',
+    safe: false,
+  },
+  {
     filename: 'sample_clean.pdf',
     label: 'Clean Document',
     description: 'A normal team lunch menu with no injections. Use this to see what a safe scan result looks like.',

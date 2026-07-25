@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, CheckCircle, ShieldAlert, FileSearch, Sparkles, LayoutDashboard, ChevronLeft, ChevronRight, EyeOff, Loader2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle, ShieldAlert, FileSearch, Sparkles, LayoutDashboard, ChevronLeft, ChevronRight, EyeOff, Loader2, FileCog } from 'lucide-react';
 import { ScanResponse } from '../types';
 
 interface ResultsDashboardProps {
@@ -140,6 +140,32 @@ export default function ResultsDashboard({ results, loading }: ResultsDashboardP
                   </ul>
                 ) : (
                   <p>No invisible, tiny, or obfuscated text detected.</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {results.documentStructureResult && (
+            <div className={`result-card ${results.documentStructureResult.safe ? 'safe' : 'danger'}`}>
+              <div className="result-header">
+                <h3>
+                  <FileCog size={16} />
+                  Document Structure
+                </h3>
+                <span className={`badge ${results.documentStructureResult.safe ? 'safe' : 'danger'}`}>
+                  {results.documentStructureResult.safe ? <CheckCircle size={12} /> : <AlertTriangle size={12} />}
+                  {results.documentStructureResult.safe ? 'Secure' : 'Flagged'}
+                </span>
+              </div>
+              <div className="result-content">
+                {!results.documentStructureResult.safe ? (
+                  <ul>
+                    {results.documentStructureResult.findings?.map((finding, idx) => (
+                      <li key={idx}>{finding}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No hidden metadata, annotations, or active content detected.</p>
                 )}
               </div>
             </div>

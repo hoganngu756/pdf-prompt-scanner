@@ -51,6 +51,7 @@ public class ScanOrchestrationService {
         String hFlagsStr = "";
         String lExplanation = "";
         String vFlagsStr = "";
+        String sFlagsStr = "";
 
         // Visual Obfuscation Scan
         List<String> voFindings = pdfData.visualObfuscationFindings();
@@ -60,6 +61,16 @@ public class ScanOrchestrationService {
         if (!isVoSafe) {
             isOverallSafe = false;
             vFlagsStr = String.join(" | ", voFindings);
+        }
+
+        // Document Structure Scan (metadata, annotations, active content)
+        List<String> structureFindings = pdfData.structureFindings();
+        boolean isStructureSafe = structureFindings.isEmpty();
+        response.setDocumentStructureResult(
+                new ScanResponse.DocumentStructureResult(isStructureSafe, structureFindings));
+        if (!isStructureSafe) {
+            isOverallSafe = false;
+            sFlagsStr = String.join(" | ", structureFindings);
         }
 
         // Heuristic Scan
@@ -90,6 +101,7 @@ public class ScanOrchestrationService {
         record.setHeuristicFlags(hFlagsStr);
         record.setLlmExplanation(lExplanation);
         record.setVisualFlags(vFlagsStr);
+        record.setStructureFlags(sFlagsStr);
         scanRecordRepository.save(record);
 
         return response;

@@ -32,10 +32,16 @@ export interface VisualObfuscationResult {
   findings: string[];
 }
 
+export interface DocumentStructureResult {
+  safe: boolean;
+  findings: string[];
+}
+
 export interface ScanResponse {
   heuristicResult?: HeuristicResult;
   llmResult?: LlmResult;
   visualObfuscationResult?: VisualObfuscationResult;
+  documentStructureResult?: DocumentStructureResult;
   error?: string;
   previewImagesBase64?: string[];
   /** 1-based source page numbers aligned with previewImagesBase64 by index.

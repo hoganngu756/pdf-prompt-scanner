@@ -24,6 +24,9 @@ public class ScanRecord {
     @Column(length = 2000)
     private String visualFlags;
 
+    @Column(length = 2000)
+    private String structureFlags;
+
     public ScanRecord() {}
 
     public Long getId() { return id; }
@@ -40,4 +43,6 @@ public class ScanRecord {
     public void setLlmExplanation(String llmExplanation) { this.llmExplanation = llmExplanation; }
     public String getVisualFlags() { return visualFlags; }
     public void setVisualFlags(String visualFlags) { this.visualFlags = visualFlags; }
+    public String getStructureFlags() { return structureFlags; }
+    public void setStructureFlags(String structureFlags) { this.structureFlags = structureFlags; }
 }

@@ -36,6 +36,7 @@ public class PdfScannerService {
     private static final Logger log = LoggerFactory.getLogger(PdfScannerService.class);
 
     private final HeuristicRuleRepository heuristicRuleRepository;
+    private final PdfStructureScanner pdfStructureScanner;
 
     @Value("${ocr.tessdata.path:}")
     private String tessDataPath;
@@ -73,8 +74,10 @@ public class PdfScannerService {
     // Use ThreadLocal to cache Tesseract instances across requests safely
     private ThreadLocal<Tesseract> tesseractThreadLocal;
 
-    public PdfScannerService(HeuristicRuleRepository heuristicRuleRepository) {
+    public PdfScannerService(HeuristicRuleRepository heuristicRuleRepository,
+                             PdfStructureScanner pdfStructureScanner) {
         this.heuristicRuleRepository = heuristicRuleRepository;
+        this.pdfStructureScanner = pdfStructureScanner;
     }
 
     @PostConstruct
@@ -99,6 +102,8 @@ public class PdfScannerService {
         String extractedText,
         List<String> previewImagesBase64,
         List<String> visualObfuscationFindings,
+        /** Findings from document structure: metadata, annotations, active content. */
+        List<String> structureFindings,
         /** 1-based page numbers matching previewImagesBase64 by index. Only flagged
          *  pages are rendered, so these are not contiguous and must not be inferred
          *  from list position. */
@@ -127,6 +132,7 @@ public class PdfScannerService {
         List<Integer> previewPageNumbers = new ArrayList<>();
         String extractedTextContent;
         List<String> visualObfuscationFindings;
+        List<String> structureFindings;
 
         try (PDDocument document = Loader.loadPDF(file.getBytes())) {
             if (document.getNumberOfPages() > maxPages) {
@@ -138,6 +144,14 @@ public class PdfScannerService {
             extractedTextContent = stripper.getText(document);
             visualObfuscationFindings = stripper.getVisualObfuscationFindings();
             Map<Integer, List<PDRectangle>> highlightsPerPage = stripper.getHighlightsPerPage();
+
+            // Metadata, annotations and bookmarks never appear in the page content
+            // stream, so they are recovered separately and appended below.
+            PdfStructureScanner.StructureData structure = pdfStructureScanner.scan(document);
+            structureFindings = structure.findings();
+            if (!structure.hiddenText().isBlank()) {
+                extractedTextContent += "\n\n--- DOCUMENT METADATA & ANNOTATIONS ---\n" + structure.hiddenText();
+            }
 
             StringBuilder ocrText = new StringBuilder();
             Tesseract tesseract = tesseractThreadLocal.get();
@@ -229,6 +243,7 @@ public class PdfScannerService {
             }
         }
 
-        return new PdfData(extractedTextContent, previewImagesBase64, visualObfuscationFindings, previewPageNumbers);
+        return new PdfData(extractedTextContent, previewImagesBase64, visualObfuscationFindings,
+                structureFindings, previewPageNumbers);
     }
 }

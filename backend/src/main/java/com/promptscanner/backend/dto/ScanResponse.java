@@ -6,6 +6,7 @@ public class ScanResponse {
     private HeuristicResult heuristicResult;
     private LlmResult llmResult;
     private VisualObfuscationResult visualObfuscationResult;
+    private DocumentStructureResult documentStructureResult;
     private String error;
     private List<String> previewImagesBase64;
     private List<Integer> previewPageNumbers;
@@ -27,6 +28,9 @@ public class ScanResponse {
 
     public VisualObfuscationResult getVisualObfuscationResult() { return visualObfuscationResult; }
     public void setVisualObfuscationResult(VisualObfuscationResult visualObfuscationResult) { this.visualObfuscationResult = visualObfuscationResult; }
+
+    public DocumentStructureResult getDocumentStructureResult() { return documentStructureResult; }
+    public void setDocumentStructureResult(DocumentStructureResult documentStructureResult) { this.documentStructureResult = documentStructureResult; }
 
     public String getError() { return error; }
     public void setError(String error) { this.error = error; }
@@ -70,6 +74,23 @@ public class ScanResponse {
         public void setSafe(boolean safe) { this.safe = safe; }
         public String getAnalysis() { return analysis; }
         public void setAnalysis(String analysis) { this.analysis = analysis; }
+    }
+
+    /** Findings from document structure: metadata, annotations, and active content. */
+    public static class DocumentStructureResult {
+        private boolean safe;
+        private List<String> findings;
+
+        public DocumentStructureResult() {}
+        public DocumentStructureResult(boolean safe, List<String> findings) {
+            this.safe = safe;
+            this.findings = findings;
+        }
+
+        public boolean isSafe() { return safe; }
+        public void setSafe(boolean safe) { this.safe = safe; }
+        public List<String> getFindings() { return findings; }
+        public void setFindings(List<String> findings) { this.findings = findings; }
     }
 
     public static class VisualObfuscationResult {
