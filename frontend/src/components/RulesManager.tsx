@@ -4,6 +4,7 @@ import { toast } from 'react-hot-toast';
 import { HeuristicRule } from '../types';
 
 import { API_BASE_URL } from '../config';
+import { getAdminKey, setAdminKey } from '../adminKey';
 
 export default function RulesManager() {
   const [rules, setRules] = useState<HeuristicRule[]>([]);
@@ -17,12 +18,12 @@ export default function RulesManager() {
   const [editPhrase, setEditPhrase] = useState('');
   const [editIsRegex, setEditIsRegex] = useState(false);
 
-  // Admin access key storage
-  const [adminKey, setAdminKey] = useState(() => localStorage.getItem('pdf_promptscanner_admin_key') || '');
+  // Admin access key storage (shared with the History tab via ./adminKey)
+  const [adminKey, setAdminKeyState] = useState(() => getAdminKey());
 
   const handleAdminKeyChange = (val: string) => {
+    setAdminKeyState(val);
     setAdminKey(val);
-    localStorage.setItem('pdf_promptscanner_admin_key', val);
   };
 
   const getHeaders = (extraHeaders: Record<string, string> = {}) => {
@@ -229,7 +230,8 @@ export default function RulesManager() {
             onChange={e => handleAdminKeyChange(e.target.value)}
           />
           <span className="field-hint">
-            Required for adding, editing, deleting, or toggling heuristic rules on the server.
+            Required for adding, editing, deleting, or toggling heuristic rules, and for
+            viewing scan history.
           </span>
         </div>
 

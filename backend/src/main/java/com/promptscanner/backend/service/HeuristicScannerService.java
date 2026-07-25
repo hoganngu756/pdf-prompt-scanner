@@ -9,6 +9,8 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
@@ -19,8 +21,31 @@ public class HeuristicScannerService {
 
     private final HeuristicRuleRepository heuristicRuleRepository;
 
+    /**
+     * Compiling every rule on every scan is pure repeated work, since rule text
+     * changes rarely. Keyed by phrase + mode so an edited rule compiles afresh.
+     */
+    private final Map<String, Pattern> patternCache = new ConcurrentHashMap<>();
+
     public HeuristicScannerService(HeuristicRuleRepository heuristicRuleRepository) {
         this.heuristicRuleRepository = heuristicRuleRepository;
+    }
+
+    private Pattern patternFor(HeuristicRule rule) {
+        String key = (rule.isRegex() ? "re:" : "lit:") + rule.getPhrase();
+        Pattern cached = patternCache.get(key);
+        if (cached != null) {
+            return cached;
+        }
+        Pattern compiled = rule.isRegex()
+                ? Pattern.compile(rule.getPhrase(), Pattern.CASE_INSENSITIVE)
+                : buildObfuscationTolerantPattern(rule.getPhrase());
+        // Bound the cache so a churn of distinct rules can't grow it without limit
+        if (patternCache.size() > 1000) {
+            patternCache.clear();
+        }
+        patternCache.put(key, compiled);
+        return compiled;
     }
 
     /**
@@ -86,12 +111,7 @@ public class HeuristicScannerService {
 
         for (HeuristicRule rule : activeRules) {
             try {
-                Pattern pattern;
-                if (rule.isRegex()) {
-                    pattern = Pattern.compile(rule.getPhrase(), Pattern.CASE_INSENSITIVE);
-                } else {
-                    pattern = buildObfuscationTolerantPattern(rule.getPhrase());
-                }
+                Pattern pattern = patternFor(rule);
 
                 if (pattern.matcher(normalizedText).find()) {
                     String matchType = rule.isRegex() ? "regex pattern" : "phrase";

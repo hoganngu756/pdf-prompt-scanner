@@ -113,8 +113,11 @@ public class LlmScannerService {
             return new ScanResponse.LlmResult(false, "Failed to parse LLM response format.");
 
         } catch (Exception e) {
+            // The upstream message can carry hostnames and Google's raw error body,
+            // so it is logged server-side but never relayed to the browser.
             log.error("LLM API Error during scan: {}", e.getMessage(), e);
-            return new ScanResponse.LlmResult(false, "LLM API Error: " + e.getMessage());
+            return new ScanResponse.LlmResult(false,
+                    "The AI analysis service could not be reached. Heuristic and visual checks above are unaffected.");
         }
     }
 }

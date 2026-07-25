@@ -35,6 +35,9 @@ public class HighlightingTextStripper extends PDFTextStripper {
     protected void startPage(PDPage page) throws IOException {
         super.startPage(page);
         currentPageIndex = getCurrentPageNo() - 1;
+        // Colours are only consulted within the page being written, so clearing here
+        // keeps this from accumulating one entry per glyph across the whole document.
+        characterColors.clear();
     }
 
     @Override

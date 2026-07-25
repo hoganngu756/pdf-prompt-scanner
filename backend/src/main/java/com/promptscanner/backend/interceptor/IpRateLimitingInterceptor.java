@@ -16,37 +16,104 @@ public class IpRateLimitingInterceptor implements HandlerInterceptor {
 
     private static final Logger log = LoggerFactory.getLogger(IpRateLimitingInterceptor.class);
 
+    /** Scans are expensive (render + OCR + LLM), so they get a tight budget. */
     @Value("${app.scan.rate-limit-rpm:10}")
     private int rateLimitRpm;
+
+    /**
+     * Cheap reads and rule edits share a separate, roomier budget -- browsing the
+     * tabs issues several requests and must not burn the scan allowance.
+     */
+    @Value("${app.api.rate-limit-rpm:120}")
+    private int apiRateLimitRpm;
+
+    /**
+     * Hops added by proxies in front of this app: 1 for a single Render/CDN layer,
+     * 0 when the app is reached directly (local dev). Entries left of this depth
+     * are client-supplied and are never trusted. Getting this wrong in the "too
+     * high" direction is what makes X-Forwarded-For spoofable, so it is explicit.
+     */
+    @Value("${app.scan.trusted-proxy-count:1}")
+    private int trustedProxyCount;
+
+    /** Drop a bucket once it has been full and idle for this long. */
+    private static final long BUCKET_TTL_MS = 10 * 60 * 1000L;
+    private static final int MAX_TRACKED_CLIENTS = 50_000;
 
     private final Map<String, TokenBucket> buckets = new ConcurrentHashMap<>();
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-        if (!"/api/scan".equals(request.getRequestURI()) || !"POST".equalsIgnoreCase(request.getMethod())) {
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
             return true;
         }
 
+        boolean isScan = "/api/scan".equals(request.getRequestURI()) && "POST".equalsIgnoreCase(request.getMethod());
+        int limit = isScan ? rateLimitRpm : apiRateLimitRpm;
+
         String ip = getClientIp(request);
-        TokenBucket bucket = buckets.computeIfAbsent(ip, k -> new TokenBucket(rateLimitRpm, 60000)); // 60s window
+        evictStaleBuckets();
+        // Separate buckets so browsing can't consume the scan allowance, or vice versa
+        String bucketKey = (isScan ? "scan|" : "api|") + ip;
+        TokenBucket bucket = buckets.computeIfAbsent(bucketKey, k -> new TokenBucket(limit, 60000)); // 60s window
 
         if (!bucket.tryConsume()) {
             log.warn("Rate limit exceeded for IP: {} on endpoint {}", ip, request.getRequestURI());
             response.setStatus(429); // Too Many Requests
             response.setContentType("application/json");
-            response.getWriter().write("{\"error\": \"Too many scan requests. Please wait before scanning again.\"}");
+            response.getWriter().write(isScan
+                    ? "{\"error\": \"Too many scan requests. Please wait before scanning again.\"}"
+                    : "{\"error\": \"Too many requests. Please wait a moment.\"}");
             return false;
         }
 
         return true;
     }
 
+    /**
+     * Reads the client address from the right end of X-Forwarded-For.
+     *
+     * Proxies append, so the rightmost entries are the trustworthy ones; taking
+     * the leftmost lets a caller spoof an unlimited number of identities simply by
+     * sending their own X-Forwarded-For header, bypassing the limit entirely.
+     */
     private String getClientIp(HttpServletRequest request) {
-        String xfHeader = request.getHeader("X-Forwarded-For");
-        if (xfHeader == null) {
+        // With no proxy in front, X-Forwarded-For is purely attacker-controlled and
+        // must be ignored outright -- otherwise a direct-exposure deployment is
+        // trivially bypassable.
+        if (trustedProxyCount <= 0) {
             return request.getRemoteAddr();
         }
-        return xfHeader.split(",")[0].trim();
+
+        String xfHeader = request.getHeader("X-Forwarded-For");
+        if (xfHeader == null || xfHeader.isBlank()) {
+            return request.getRemoteAddr();
+        }
+
+        String[] hops = xfHeader.split(",");
+        // Proxies append, so the rightmost entries are the trustworthy ones. Step
+        // back over our own trusted layers to reach the address they observed;
+        // anything further left was supplied by the caller and is ignored.
+        int index = hops.length - trustedProxyCount;
+        if (index < 0) {
+            index = 0;
+        }
+        String candidate = hops[index].trim();
+        return candidate.isEmpty() ? request.getRemoteAddr() : candidate;
+    }
+
+    /**
+     * Without eviction the map grows once per distinct client address forever,
+     * which is itself a memory-exhaustion vector.
+     */
+    private void evictStaleBuckets() {
+        if (buckets.size() < MAX_TRACKED_CLIENTS) {
+            long now = System.currentTimeMillis();
+            buckets.values().removeIf(b -> b.isIdleSince(now, BUCKET_TTL_MS));
+            return;
+        }
+        log.warn("Rate limiter tracking {} clients; clearing state to bound memory.", buckets.size());
+        buckets.clear();
     }
 
     private static class TokenBucket {
@@ -69,6 +136,11 @@ public class IpRateLimitingInterceptor implements HandlerInterceptor {
                 return true;
             }
             return false;
+        }
+
+        /** Idle means fully refilled and untouched, so forgetting it changes nothing. */
+        synchronized boolean isIdleSince(long now, long ttlMs) {
+            return now - lastRefillTime > ttlMs && tokens >= capacity;
         }
 
         private void refill() {

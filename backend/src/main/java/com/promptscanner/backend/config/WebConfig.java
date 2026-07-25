@@ -30,15 +30,19 @@ public class WebConfig implements WebMvcConfigurer {
                 .allowedOrigins(origins)
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .allowedHeaders("*")
-                .allowCredentials(true);
+                // Auth is a bearer-style header, not a cookie, so credentialed
+                // cross-origin requests are never needed.
+                .allowCredentials(false);
     }
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(adminApiKeyInterceptor)
-                .addPathPatterns("/api/rules", "/api/rules/**");
-        
+                .addPathPatterns("/api/rules", "/api/rules/**", "/api/history");
+
+        // Every endpoint is rate limited, not just scanning, so rule and history
+        // traffic can't be used to hammer the instance for free.
         registry.addInterceptor(ipRateLimitingInterceptor)
-                .addPathPatterns("/api/scan");
+                .addPathPatterns("/api/**");
     }
 }

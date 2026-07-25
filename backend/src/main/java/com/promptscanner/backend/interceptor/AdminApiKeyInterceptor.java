@@ -8,10 +8,21 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.Set;
+
 @Component
 public class AdminApiKeyInterceptor implements HandlerInterceptor {
 
     private static final Logger log = LoggerFactory.getLogger(AdminApiKeyInterceptor.class);
+
+    /**
+     * Endpoints whose GET responses are sensitive. Scan history exposes filenames,
+     * flagged excerpts, and AI analyses of documents submitted by other users, so
+     * reads are credentialed too -- unlike the rule list, which stays public.
+     */
+    private static final Set<String> READ_PROTECTED_PATHS = Set.of("/api/history");
 
     @Value("${app.admin.api-key}")
     private String adminApiKey;
@@ -19,13 +30,16 @@ public class AdminApiKeyInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         String method = request.getMethod();
-        
-        // Only protect write operations (POST, PUT, DELETE)
-        if ("GET".equalsIgnoreCase(method) || "OPTIONS".equalsIgnoreCase(method)) {
+
+        // CORS preflight must never be challenged
+        if ("OPTIONS".equalsIgnoreCase(method)) {
             return true;
         }
 
-        String apiKeyHeader = request.getHeader("X-Admin-Api-Key");
+        boolean isRead = "GET".equalsIgnoreCase(method);
+        if (isRead && !READ_PROTECTED_PATHS.contains(request.getRequestURI())) {
+            return true;
+        }
 
         // Fail closed: an unconfigured key must never leave rule management open
         // to anonymous callers, since deleting every rule silently disables the
@@ -39,7 +53,8 @@ public class AdminApiKeyInterceptor implements HandlerInterceptor {
             return false;
         }
 
-        if (apiKeyHeader == null || !adminApiKey.equals(apiKeyHeader)) {
+        String apiKeyHeader = request.getHeader("X-Admin-Api-Key");
+        if (!matchesAdminKey(apiKeyHeader)) {
             log.warn("Unauthorized request to {}: API Key {}.", request.getRequestURI(),
                     apiKeyHeader == null ? "missing" : "mismatch");
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
@@ -49,5 +64,15 @@ public class AdminApiKeyInterceptor implements HandlerInterceptor {
         }
 
         return true;
+    }
+
+    /** Constant-time comparison so response timing can't be used to recover the key. */
+    private boolean matchesAdminKey(String provided) {
+        if (provided == null) {
+            return false;
+        }
+        return MessageDigest.isEqual(
+                adminApiKey.getBytes(StandardCharsets.UTF_8),
+                provided.getBytes(StandardCharsets.UTF_8));
     }
 }

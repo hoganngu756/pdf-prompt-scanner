@@ -80,6 +80,22 @@ class ScanControllerTest {
     }
 
     @Test
+    void getHistory_WithoutApiKeyHeader_Returns401() throws Exception {
+        // History exposes filenames and AI analyses of other users' documents
+        mockMvc.perform(get("/api/history"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void getHistory_WithValidApiKeyHeader_SucceedsAndSerializesDates() throws Exception {
+        // Also guards the ObjectMapper regression: a bean override once stripped
+        // JavaTimeModule, making LocalDateTime serialization fail with a 500.
+        mockMvc.perform(get("/api/history")
+                        .header("X-Admin-Api-Key", "test-admin-secret-key"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void scanPdf_WithEmptyFile_ReturnsBadRequest() throws Exception {
         MockMultipartFile emptyFile = new MockMultipartFile("file", "empty.pdf", "application/pdf", new byte[0]);
 

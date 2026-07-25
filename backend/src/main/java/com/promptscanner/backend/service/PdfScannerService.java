@@ -43,6 +43,33 @@ public class PdfScannerService {
     @Value("${app.scan.max-pages:50}")
     private int maxPages;
 
+    /** Nominal preview resolution, reduced automatically for oversized pages. */
+    private static final float PREVIEW_DPI = 150f;
+
+    /**
+     * Page dimensions come from the uploaded file, and the PDF spec allows a
+     * 14400x14400pt MediaBox. At 150 DPI that is 30000x30000px -- a 3.6 GB bitmap
+     * from a ~600 byte upload. Capping total output pixels keeps render cost
+     * bounded regardless of what the document declares.
+     */
+    private static final double MAX_PREVIEW_PIXELS = 4_000_000d; // ~4 MP, well above a 150 DPI A4 page
+    private static final float MIN_PREVIEW_DPI = 12f;
+
+    /** Chooses the largest DPI up to {@link #PREVIEW_DPI} that stays within the pixel budget. */
+    static float previewDpiFor(PDRectangle mediaBox) {
+        float widthIn = Math.abs(mediaBox.getWidth()) / 72f;
+        float heightIn = Math.abs(mediaBox.getHeight()) / 72f;
+        if (widthIn <= 0 || heightIn <= 0) {
+            return PREVIEW_DPI;
+        }
+        double pixelsAtFullDpi = (widthIn * PREVIEW_DPI) * (heightIn * PREVIEW_DPI);
+        if (pixelsAtFullDpi <= MAX_PREVIEW_PIXELS) {
+            return PREVIEW_DPI;
+        }
+        float scaled = (float) Math.sqrt(MAX_PREVIEW_PIXELS / (widthIn * heightIn));
+        return Math.max(MIN_PREVIEW_DPI, scaled);
+    }
+
     // Use ThreadLocal to cache Tesseract instances across requests safely
     private ThreadLocal<Tesseract> tesseractThreadLocal;
 
@@ -187,8 +214,13 @@ public class PdfScannerService {
                     }
                 }
 
-                // Render the page to image
-                BufferedImage bim = pdfRenderer.renderImageWithDPI(pageIndex, 150);
+                // Render the page to image, backing off the DPI for oversized pages
+                float dpi = previewDpiFor(page.getMediaBox());
+                if (dpi < PREVIEW_DPI) {
+                    log.warn("Page {} is {}x{}pt; reducing preview to {} DPI to stay within the pixel budget.",
+                            pageIndex + 1, page.getMediaBox().getWidth(), page.getMediaBox().getHeight(), dpi);
+                }
+                BufferedImage bim = pdfRenderer.renderImageWithDPI(pageIndex, dpi);
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 ImageIO.write(bim, "png", baos);
                 byte[] imageBytes = baos.toByteArray();

@@ -11,6 +11,7 @@ import { ScanResponse, ScanRecord } from './types'
 import './index.css'
 
 import { API_BASE_URL } from './config'
+import { withAdminKey } from './adminKey'
 
 function App() {
   const [file, setFile] = useState<File | null>(null)
@@ -21,14 +22,25 @@ function App() {
   const [activeTab, setActiveTab] = useState('scan')
   const [history, setHistory] = useState<ScanRecord[]>([])
 
+  const [historyError, setHistoryError] = useState<string | null>(null)
+
   const fetchHistory = async () => {
+    setHistoryError(null)
     try {
-      const res = await fetch(`${API_BASE_URL}/history`)
+      // History exposes other users' filenames and analyses, so it is credentialed
+      const res = await fetch(`${API_BASE_URL}/history`, { headers: withAdminKey() })
+      if (res.status === 401 || res.status === 503) {
+        const msg = 'Scan history requires an Admin API Key. Enter it in the Rules tab.'
+        setHistoryError(msg)
+        setHistory([])
+        return
+      }
       if (!res.ok) throw new Error('Network response was not ok')
       const data = await res.json()
       setHistory(data)
     } catch (err) {
       console.error('Failed to fetch history:', err)
+      setHistoryError('Failed to fetch scan history.')
       toast.error('Failed to fetch scan history')
     }
   }
@@ -183,7 +195,7 @@ function App() {
       )}
 
       {activeTab === 'history' && (
-        <HistoryTable history={history} />
+        <HistoryTable history={history} error={historyError} />
       )}
 
       {activeTab === 'rules' && (

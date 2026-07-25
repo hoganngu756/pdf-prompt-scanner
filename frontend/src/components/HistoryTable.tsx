@@ -1,18 +1,28 @@
-import { History, CheckCircle, AlertTriangle, SearchX } from 'lucide-react';
+import { History, CheckCircle, AlertTriangle, SearchX, KeyRound } from 'lucide-react';
 import { ScanRecord } from '../types';
 
 interface HistoryTableProps {
   history: ScanRecord[];
+  error?: string | null;
 }
 
-export default function HistoryTable({ history }: HistoryTableProps) {
+export default function HistoryTable({ history, error }: HistoryTableProps) {
   return (
     <div className="card">
       <h2 className="card-title">
         <History size={18} />
         Scan History
       </h2>
-      {history.length === 0 ? (
+      {error ? (
+        <div className="result-card warning">
+          <div className="result-header">
+            <h3><KeyRound size={16} /> Admin key required</h3>
+          </div>
+          <div className="result-content">
+            <p>{error}</p>
+          </div>
+        </div>
+      ) : history.length === 0 ? (
         <div className="empty-state">
           <SearchX size={40} />
           <p>No scans have been performed yet.</p>
