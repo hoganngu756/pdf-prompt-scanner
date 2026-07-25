@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, CheckCircle, ShieldAlert, FileSearch, Sparkles, LayoutDashboard, ChevronLeft, ChevronRight, EyeOff } from 'lucide-react';
+import { AlertTriangle, CheckCircle, ShieldAlert, FileSearch, Sparkles, LayoutDashboard, ChevronLeft, ChevronRight, EyeOff, Loader2 } from 'lucide-react';
 import { ScanResponse } from '../types';
 
 interface ResultsDashboardProps {
@@ -28,6 +28,22 @@ export default function ResultsDashboard({ results, loading }: ResultsDashboardP
         </div>
       )}
 
+      {loading && (
+        <div className="scan-progress" aria-live="polite" aria-busy="true">
+          <div className="scan-progress-status">
+            <Loader2 size={16} className="animate-spin" />
+            <span>Analyzing document…</span>
+          </div>
+          <p className="scan-progress-note">
+            Extracting text, rendering page previews, and running the enabled checks.
+            The first scan can take up to a minute while the backend wakes up.
+          </p>
+          <div className="skeleton skeleton-preview" />
+          <div className="skeleton skeleton-card" />
+          <div className="skeleton skeleton-card" />
+        </div>
+      )}
+
       {results?.error && (
         <div className="result-card danger">
           <div className="result-header">
@@ -42,12 +58,18 @@ export default function ResultsDashboard({ results, loading }: ResultsDashboardP
           {results.previewImagesBase64 && results.previewImagesBase64.length > 0 && (
             (() => {
               const previewImages = results.previewImagesBase64;
+              // Only flagged pages get rendered, so the label must come from the
+              // backend's real page numbers — not the carousel index.
+              const pageNumbers = results.previewPageNumbers;
+              const sourcePage = pageNumbers?.[currentIndex];
               return (
                 <div className="preview-container">
                   <div className="preview-header">
                     <h3><FileSearch size={15} /> Document Preview</h3>
                     <span className="preview-count">
-                      Page {currentIndex + 1} of {previewImages.length}
+                      {sourcePage
+                        ? `Page ${sourcePage}${previewImages.length > 1 ? ` — ${currentIndex + 1} of ${previewImages.length} shown` : ''}`
+                        : `Page ${currentIndex + 1} of ${previewImages.length}`}
                     </span>
                   </div>
                   
@@ -65,7 +87,7 @@ export default function ResultsDashboard({ results, loading }: ResultsDashboardP
                     <div className="carousel-slide">
                       <img 
                         src={previewImages[currentIndex]} 
-                        alt={`PDF Preview Page ${currentIndex + 1}`} 
+                        alt={`PDF preview of page ${sourcePage ?? currentIndex + 1}`}
                       />
                     </div>
 
@@ -87,7 +109,7 @@ export default function ResultsDashboard({ results, loading }: ResultsDashboardP
                           key={idx}
                           onClick={() => setCurrentIndex(idx)}
                           className={`carousel-indicator-dot ${currentIndex === idx ? 'active' : ''}`}
-                          title={`Go to page ${idx + 1}`}
+                          title={`Go to page ${pageNumbers?.[idx] ?? idx + 1}`}
                         />
                       ))}
                     </div>

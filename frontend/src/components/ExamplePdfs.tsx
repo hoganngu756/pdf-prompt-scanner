@@ -1,4 +1,5 @@
 import { Download, FileWarning, AlertTriangle, CheckCircle } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 
 interface SamplePdf {
   filename: string;
@@ -68,11 +69,15 @@ export default function ExamplePdfs({ onSelectSample }: ExamplePdfsProps) {
   const handleTrySample = async (sample: SamplePdf) => {
     try {
       const response = await fetch(`/samples/${sample.filename}`);
+      if (!response.ok) {
+        throw new Error(`Server returned ${response.status}`);
+      }
       const blob = await response.blob();
       const file = new File([blob], sample.filename, { type: 'application/pdf' });
       onSelectSample(file);
     } catch (err) {
       console.error('Failed to load sample:', err);
+      toast.error(`Could not load "${sample.label}". Please try again.`);
     }
   };
 
@@ -106,9 +111,9 @@ export default function ExamplePdfs({ onSelectSample }: ExamplePdfsProps) {
               <button 
                 className="sample-btn try"
                 onClick={() => handleTrySample(sample)}
-                title="Load this sample into the scanner"
+                title="Load this sample and scan it immediately"
               >
-                Load & Scan
+                Scan this sample
               </button>
               <a 
                 href={`/samples/${sample.filename}`} 

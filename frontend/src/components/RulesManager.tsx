@@ -36,6 +36,18 @@ export default function RulesManager() {
     return headers;
   };
 
+  /** A rule with an unparseable regex is skipped silently at scan time, so catch it here. */
+  const isInvalidRegex = (phrase: string, useRegex: boolean): boolean => {
+    if (!useRegex) return false;
+    try {
+      new RegExp(phrase);
+      return false;
+    } catch (err) {
+      toast.error(`Invalid regular expression: ${err instanceof Error ? err.message : 'check the syntax'}`);
+      return true;
+    }
+  };
+
   const handleResponseError = async (response: Response, fallbackMessage: string) => {
     if (response.status === 401) {
       toast.error('Unauthorized: Please enter a valid Admin API Key in the settings field below.');
@@ -73,6 +85,7 @@ export default function RulesManager() {
       toast.error('Rule phrase cannot be empty');
       return;
     }
+    if (isInvalidRegex(newPhrase.trim(), newIsRegex)) return;
 
     setSubmitting(true);
     try {
@@ -167,6 +180,7 @@ export default function RulesManager() {
       toast.error('Rule phrase cannot be empty');
       return;
     }
+    if (isInvalidRegex(editPhrase.trim(), editIsRegex)) return;
 
     try {
       const response = await fetch(`${API_BASE_URL}/rules/${ruleId}`, {

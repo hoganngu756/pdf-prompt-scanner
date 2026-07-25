@@ -41,6 +41,7 @@ public class ScanOrchestrationService {
         PdfScannerService.PdfData pdfData = pdfScannerService.processPdf(file);
         String extractedText = pdfData.extractedText();
         response.setPreviewImagesBase64(pdfData.previewImagesBase64());
+        response.setPreviewPageNumbers(pdfData.previewPageNumbers());
         
         if (log.isDebugEnabled() && extractedText != null) {
             log.debug("Extracted Text Preview: {}...", extractedText.substring(0, Math.min(extractedText.length(), 200)));

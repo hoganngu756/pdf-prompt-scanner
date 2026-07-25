@@ -287,6 +287,49 @@ header h1.main-logo {
   gap: var(--space-2);
 }
 
+/* ===== Scan Progress ===== */
+.scan-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.scan-progress-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.scan-progress-note {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin-bottom: var(--space-1);
+}
+
+.skeleton {
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    90deg,
+    var(--surface-hover) 25%,
+    var(--surface-subtle) 37%,
+    var(--surface-hover) 63%
+  );
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton-preview { height: 220px; }
+.skeleton-card { height: 76px; }
+
+@keyframes shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
 /* ===== Shared Empty State ===== */
 .empty-state {
   display: flex;
@@ -408,6 +451,11 @@ header h1.main-logo {
 .toggle-label input[type="checkbox"]:checked {
   background: var(--accent);
   border-color: var(--accent);
+}
+
+.toggle-label.is-always-on {
+  cursor: default;
+  gap: var(--space-2);
 }
 
 /* Scan-option icons echo their checkbox state */

@@ -38,4 +38,7 @@ export interface ScanResponse {
   visualObfuscationResult?: VisualObfuscationResult;
   error?: string;
   previewImagesBase64?: string[];
+  /** 1-based source page numbers aligned with previewImagesBase64 by index.
+   *  Only flagged pages are rendered, so these are not contiguous. */
+  previewPageNumbers?: number[];
 }

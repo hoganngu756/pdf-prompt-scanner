@@ -8,11 +8,16 @@ public class ScanResponse {
     private VisualObfuscationResult visualObfuscationResult;
     private String error;
     private List<String> previewImagesBase64;
+    private List<Integer> previewPageNumbers;
 
     public ScanResponse() {}
 
     public List<String> getPreviewImagesBase64() { return previewImagesBase64; }
     public void setPreviewImagesBase64(List<String> previewImagesBase64) { this.previewImagesBase64 = previewImagesBase64; }
+
+    /** 1-based source page numbers aligned with previewImagesBase64 by index. */
+    public List<Integer> getPreviewPageNumbers() { return previewPageNumbers; }
+    public void setPreviewPageNumbers(List<Integer> previewPageNumbers) { this.previewPageNumbers = previewPageNumbers; }
 
     public HeuristicResult getHeuristicResult() { return heuristicResult; }
     public void setHeuristicResult(HeuristicResult heuristicResult) { this.heuristicResult = heuristicResult; }

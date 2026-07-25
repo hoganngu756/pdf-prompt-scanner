@@ -71,7 +71,11 @@ public class PdfScannerService {
     public record PdfData(
         String extractedText,
         List<String> previewImagesBase64,
-        List<String> visualObfuscationFindings
+        List<String> visualObfuscationFindings,
+        /** 1-based page numbers matching previewImagesBase64 by index. Only flagged
+         *  pages are rendered, so these are not contiguous and must not be inferred
+         *  from list position. */
+        List<Integer> previewPageNumbers
     ) {}
 
     public PdfData processPdf(MultipartFile file) throws IOException {
@@ -93,6 +97,7 @@ public class PdfScannerService {
         }
 
         List<String> previewImagesBase64 = new ArrayList<>();
+        List<Integer> previewPageNumbers = new ArrayList<>();
         String extractedTextContent;
         List<String> visualObfuscationFindings;
 
@@ -188,9 +193,10 @@ public class PdfScannerService {
                 ImageIO.write(bim, "png", baos);
                 byte[] imageBytes = baos.toByteArray();
                 previewImagesBase64.add("data:image/png;base64," + Base64.getEncoder().encodeToString(imageBytes));
+                previewPageNumbers.add(pageIndex + 1);
             }
         }
 
-        return new PdfData(extractedTextContent, previewImagesBase64, visualObfuscationFindings);
+        return new PdfData(extractedTextContent, previewImagesBase64, visualObfuscationFindings, previewPageNumbers);
     }
 }

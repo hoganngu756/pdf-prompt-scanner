@@ -39,23 +39,44 @@ function App() {
     }
   }, [activeTab])
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setFile(e.target.files[0])
+  // Mirrors spring.servlet.multipart.max-file-size on the backend. Checking here
+  // saves the user a full upload that the server would only reject at the end.
+  const MAX_FILE_BYTES = 10 * 1024 * 1024
+
+  const acceptFile = (candidate: File): boolean => {
+    const isPdf =
+      candidate.type === 'application/pdf' || candidate.name.toLowerCase().endsWith('.pdf')
+    if (!isPdf) {
+      toast.error(`"${candidate.name}" is not a PDF. Only PDF files can be scanned.`)
+      return false
     }
+    if (candidate.size > MAX_FILE_BYTES) {
+      toast.error(
+        `"${candidate.name}" is ${(candidate.size / 1024 / 1024).toFixed(1)} MB. The maximum size is 10 MB.`
+      )
+      return false
+    }
+    setFile(candidate)
+    setResults(null)
+    return true
   }
 
-  const handleScan = async () => {
-    if (!file) {
-      toast.error('Please select a file first')
-      return
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      acceptFile(e.target.files[0])
     }
+    // Allow re-selecting the same file after a rejection
+    e.target.value = ''
+  }
 
+  // Takes the file explicitly so callers can scan immediately after selecting one,
+  // without waiting for the `file` state update to land.
+  const runScan = async (targetFile: File) => {
     setLoading(true)
     setResults(null)
 
     const formData = new FormData()
-    formData.append('file', file)
+    formData.append('file', targetFile)
     formData.append('useLLM', String(useLLM))
     formData.append('useHeuristics', String(useHeuristics))
 
@@ -90,10 +111,17 @@ function App() {
     }
   }
 
+  const handleScan = () => {
+    if (!file) {
+      toast.error('Please select a file first')
+      return
+    }
+    runScan(file)
+  }
+
   const handleSelectSample = (sampleFile: File) => {
     setFile(sampleFile)
-    setResults(null)
-    toast.success(`Loaded "${sampleFile.name}" — click Analyze Document to scan it.`)
+    runScan(sampleFile)
   }
 
   return (
@@ -125,7 +153,7 @@ function App() {
           <div>
             <UploadSection
               file={file}
-              setFile={setFile}
+              onFileSelected={acceptFile}
               handleFileChange={handleFileChange}
               useHeuristics={useHeuristics}
               setUseHeuristics={setUseHeuristics}
@@ -137,7 +165,9 @@ function App() {
           </div>
           <div className="results-aside">
             <ResultsDashboard results={results} loading={loading} />
-            {!results && !loading && (
+            {/* Keep the guide visible until a *successful* scan replaces it, so an
+                error doesn't strand the user with no examples to retry from. */}
+            {!loading && (!results || !!results.error) && (
               <>
                 <div className="card">
                   <WelcomeGuide />

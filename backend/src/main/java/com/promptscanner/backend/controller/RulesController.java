@@ -6,6 +6,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 @RestController
 @RequestMapping("/api")
@@ -22,11 +24,26 @@ public class RulesController {
         return ResponseEntity.ok(heuristicRuleRepository.findAll());
     }
 
+    /**
+     * An unparseable regex is silently skipped at scan time, so a rule saved with one
+     * would show as "Active" while never matching anything. Reject it at the door.
+     */
+    private void validateRegex(HeuristicRule rule) {
+        if (Boolean.TRUE.equals(rule.getIsRegex()) && rule.getPhrase() != null) {
+            try {
+                Pattern.compile(rule.getPhrase());
+            } catch (PatternSyntaxException e) {
+                throw new IllegalArgumentException("Invalid regular expression: " + e.getDescription());
+            }
+        }
+    }
+
     @PostMapping("/rules")
     public ResponseEntity<HeuristicRule> createRule(@RequestBody HeuristicRule rule) {
         if (rule.getPhrase() == null || rule.getPhrase().trim().isEmpty()) {
             return ResponseEntity.badRequest().build();
         }
+        validateRegex(rule);
         // Default active to true only if not provided
         if (rule.getIsActive() == null) {
             rule.setActive(true);
@@ -40,6 +57,7 @@ public class RulesController {
 
     @PutMapping("/rules/{id}")
     public ResponseEntity<HeuristicRule> updateRule(@PathVariable("id") Long id, @RequestBody HeuristicRule updatedRule) {
+        validateRegex(updatedRule);
         return heuristicRuleRepository.findById(id)
                 .map(rule -> {
                     rule.setPhrase(updatedRule.getPhrase());

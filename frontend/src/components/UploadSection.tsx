@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { FileUp, FileText, Settings, ShieldAlert, Cpu, ScanSearch, Loader2 } from 'lucide-react';
+import { FileUp, FileText, Settings, ShieldAlert, Cpu, ScanSearch, Loader2, EyeOff } from 'lucide-react';
 
 interface UploadSectionProps {
   file: File | null;
-  setFile: (file: File | null) => void;
+  /** Validates and accepts a candidate file; returns false if it was rejected. */
+  onFileSelected: (file: File) => boolean;
   handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   useHeuristics: boolean;
   setUseHeuristics: (val: boolean) => void;
@@ -13,10 +14,10 @@ interface UploadSectionProps {
   handleScan: () => void;
 }
 
-export default function UploadSection({ 
-  file, 
-  setFile,
-  handleFileChange, 
+export default function UploadSection({
+  file,
+  onFileSelected,
+  handleFileChange,
   useHeuristics, 
   setUseHeuristics, 
   useLLM, 
@@ -42,10 +43,8 @@ export default function UploadSection({
     setDragActive(false);
     
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const droppedFile = e.dataTransfer.files[0];
-      if (droppedFile.type === "application/pdf" || droppedFile.name.toLowerCase().endsWith(".pdf")) {
-        setFile(droppedFile);
-      }
+      // Delegates validation so a rejected drop reports why instead of doing nothing
+      onFileSelected(e.dataTransfer.files[0]);
     }
   };
 
@@ -93,12 +92,26 @@ export default function UploadSection({
           Scan Options
         </h4>
         
+        {/* Always runs server-side, so it's shown as a fixed row rather than a
+            toggle — otherwise its result card looks like it came from nowhere. */}
+        <div className="settings-option">
+          <div className="toggle-label is-always-on">
+            <EyeOff size={16} className="option-icon is-on" />
+            Visual Obfuscation Audit
+            <span className="badge compact neutral">Always on</span>
+          </div>
+          <div className="option-tooltip">
+            <strong>Visual Obfuscation Audit</strong>
+            <p>Always runs. Detects white-on-white text and fonts under 3pt — payloads that are invisible to a human reader but not to an AI.</p>
+          </div>
+        </div>
+
         <div className="settings-option">
           <label className="toggle-label">
-            <input 
-              type="checkbox" 
-              checked={useHeuristics} 
-              onChange={(e) => setUseHeuristics(e.target.checked)} 
+            <input
+              type="checkbox"
+              checked={useHeuristics}
+              onChange={(e) => setUseHeuristics(e.target.checked)}
             />
             <ShieldAlert size={16} className={`option-icon ${useHeuristics ? 'is-on' : ''}`} />
             Heuristics Scan
