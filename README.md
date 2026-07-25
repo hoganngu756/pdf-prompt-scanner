@@ -1,82 +1,102 @@
 # PDF Prompt Scanner
 
-**Live Deployment**: [pdf-prompt-scanner.vercel.app](https://pdf-prompt-scanner.vercel.app)  
-*(Note: The backend is hosted on Render's free tier. The first scan may take up to 50 seconds to wake up the server).*
+**Live Deployment**: [pdf-prompt-scanner.vercel.app](https://pdf-prompt-scanner.vercel.app)
+*(The backend is on Render's free tier — the first scan may take up to 50 seconds while the server wakes up.)*
 
-PDF Prompt Scanner is a full-stack security-auditing web application developed to detect hidden instructions, visual obfuscations, or prompt injections inside PDF documents that could hijack or jailbreak downstream LLM AI systems.
-
-It combines static heuristic analysis (custom SQLite-backed rules), computer-vision visual obfuscation audits (for invisible white text or tiny text), and deep AI context scanning (powered by the Gemini API) to ensure documents are safe for consumption by AI models.
+A full-stack security auditing tool that detects hidden instructions and prompt injections inside PDF documents before they are fed to an LLM. It targets payloads that are invisible to a human reader but fully extractable by an AI system.
 
 ---
 
-## Key Features
+## Detection Layers
 
-- **Multi-layered Scanner**:
-  - **Visual Obfuscation Audit**: Checks for stealthy injection attempts such as text rendered in white-on-white/near-white color or written in extremely small font sizes (`< 3.0pt`).
-  - **Static Heuristics Engine**: Performs regex and literal phrase checks against a database of known injection patterns (punctuation-insensitive, zero-width space, and whitespace tolerant).
-  - **AI Context Analysis**: Leverages the Gemini API to analyze document semantic intent and detect jailbreak patterns or hidden overrides.
-- **Inline PDF Preview Highlighter**: Generates high-resolution PDF page previews, rendering interactive yellow highlights over any flagged phrases, white-on-white text, or tiny text.
-- **Scan Option Tooltips**: Hover cards explaining the scan mechanics of each check directly within the upload zone.
-- **Preloaded Examples & Bad PDFs**: Built-in visual cards in the main dashboard for loading and scanning standard injection scenarios (Instruction Overrides, Role Hijacking, Data Exfiltration, Context Manipulation, and Visual Obfuscation) along with safe documents for reference.
-- **Heuristics Rules Manager**: Edit, create, delete, or toggle heuristic rules (literal or regex) directly from the UI.
-- **History Logs**: Retain, search, and audit past scanning details, flags, dates, and AI analysis reports.
+Three checks run on the backend, plus an optional AI pass:
+
+| Layer | What it catches | Always on |
+|---|---|---|
+| **Visual Obfuscation Audit** | Invisible text rendering mode (`Tr 3`), fully transparent fill, white-on-white text, and fonts under 3pt | Yes |
+| **Document Structure** | Injections in metadata (Title/Subject/Keywords), annotations, bookmarks and form field values, plus active content: `/OpenAction`, embedded JavaScript, embedded files, `/Launch` and URI actions | Yes |
+| **Heuristics Engine** | Literal and regex rules from a user-editable database. Literal rules tolerate whitespace, punctuation and zero-width-space obfuscation (`b.y.p.a.s.s`) and are anchored at word starts | Optional |
+| **AI Context Analysis** | Semantic intent — novel jailbreaks and subtle overrides that no static rule covers (Gemini) | Optional |
+
+Text recovered from metadata, annotations, bookmarks, form fields and OCR of embedded images is all folded into what the heuristic and AI layers analyse.
+
+## Other Features
+
+- **Page preview highlighter** — renders the flagged pages with yellow highlights over the offending text, labelled with the real source page number.
+- **Rules Manager** — create, edit, toggle and delete heuristic rules from the UI. Invalid regex is rejected rather than silently ignored.
+- **Example PDFs** — nine one-click samples covering instruction override, role hijacking, data exfiltration, context manipulation, tiny text, white text, invisible render mode, metadata/annotation injection, and a clean document for comparison.
+- **Scan history** — past scans with their flags and AI analysis (requires the admin key).
 
 ---
 
-## Architecture & Technology Stack
+## Tech Stack
 
-- **Frontend**: React, Vite, TypeScript, Vanilla CSS (Light SaaS Design), Lucide icons.
-- **Backend**: Spring Boot 3 (Java 21), Apache PDFBox 3.0.3 (text extraction, graphics color parsing, page highlight injection), Tess4J (OCR analysis of embedded images).
-- **Database**: SQLite (local persistence of rules and scan history via JPA/Hibernate).
+- **Frontend**: React, Vite, TypeScript, vanilla CSS design tokens, Lucide icons
+- **Backend**: Spring Boot 3 (Java 21), Apache PDFBox 3.0.3, Tess4J (OCR)
+- **Database**: SQLite via JPA/Hibernate
 
 ---
 
-## Local Setup & Installation
+## Local Setup
 
-### 1. Clone the Repository
+### 1. Clone
 ```bash
 git clone https://github.com/hoganngu756/pdf-prompt-scanner.git
 cd pdf-prompt-scanner
 ```
 
-### 2. Backend Setup (Java 21)
-Build and run the Maven project:
+### 2. Backend (Java 21)
 ```bash
 cd backend
+export ADMIN_API_KEY="pick-any-value"   # required for the Rules and History tabs
+export GEMINI_API_KEY="your-key"        # optional; needed only for the AI layer
+export TRUSTED_PROXY_COUNT=0            # no proxy in front when running locally
 ./mvnw clean install
 ./mvnw spring-boot:run
 ```
-The backend server runs locally at `http://localhost:8080`.
+Runs at `http://localhost:8080`. Scanning works without either key — untick **AI Analysis** if you have no Gemini key.
 
-### 3. Frontend Setup (Node.js & npm)
-Install dependencies and start the development server:
+### 3. Frontend
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-The frontend application will start locally at `http://localhost:5173`.
+Runs at `http://localhost:5173`. Paste your `ADMIN_API_KEY` into the field on the **Rules** tab to manage rules and view history.
+
+To regenerate the sample PDFs: `node scripts/generate-samples.mjs`
+
+---
+
+## Configuration
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `ADMIN_API_KEY` | *(none)* | Gates rule writes and history reads. **Unset means those endpoints are disabled**, not open. |
+| `GEMINI_API_KEY` | *(none)* | Enables the AI Context Analysis layer. |
+| `TRUSTED_PROXY_COUNT` | `1` | Proxy layers in front of the app. Render adds one; use `0` when running the server directly, or `X-Forwarded-For` becomes spoofable. |
+| `ALLOWED_ORIGINS` | localhost + Vercel URL | Comma-separated CORS origins. |
+| `SPRING_DATASOURCE_URL` | `jdbc:sqlite:scanner-history.db` | Point at a persistent volume to survive redeploys. |
+
+**Limits**: 10 MB per upload, 50 pages per document, 10 scans/min per IP (120/min for other endpoints), OCR on the first 5 pages, previews capped at ~4 MP per page.
 
 ---
 
 ## Deployment
 
-The application is architected to be easily deployed to production cloud platforms.
+**Frontend (Vercel)** — link the repo and set `VITE_API_BASE_URL` to your backend URL, e.g. `https://pdf-scanner-api.onrender.com/api`.
 
-### Frontend Deployment (Vercel)
-The React/Vite frontend is deployed on **Vercel** at [pdf-prompt-scanner.vercel.app](https://pdf-prompt-scanner.vercel.app).
-To configure or redeploy:
-1. Push your repository to GitHub.
-2. Link your repository to a new project in **Vercel**.
-3. Set the production environment variable:
-   - `VITE_API_BASE_URL`: The URL of your deployed backend service on Render (e.g., `https://pdf-prompt-scanner-backend.onrender.com/api`).
-4. Vercel will deploy the application automatically.
+**Backend (Render)** — the multi-stage `Dockerfile` packages Spring Boot with Tesseract OCR; Render detects it automatically. Set `ADMIN_API_KEY` and `GEMINI_API_KEY` in the service environment.
 
-### Backend Deployment (Render)
-The backend service is containerized via Docker and deployed on **Render.com** (utilizing the multi-stage `Dockerfile` packaging Spring Boot alongside Tesseract OCR).
-To redeploy or update:
-1. Link your backend repository to Render as a Web Service.
-2. Render will automatically detect the `Dockerfile` and build the container.
-3. Configure the following environment variables on Render:
-   - `GEMINI_API_KEY`: API key for the Gemini AI Scanner.
-   - `SPRING_DATASOURCE_URL`: Custom database location if persisting SQLite rules database state across redeploys.
+> **Note on persistence**: Render's free tier has no persistent disk, so the SQLite file is lost on redeploy and rules reset to the ten defaults. Attach a disk or point `SPRING_DATASOURCE_URL` at a hosted database to retain rules and history.
+
+---
+
+## Testing
+
+```bash
+cd backend && ./mvnw test     # 20 tests
+cd frontend && npm run build
+```
+
+Tests run against a throwaway database under `target/`, so they never touch `scanner-history.db`.
