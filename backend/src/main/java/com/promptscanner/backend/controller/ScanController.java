@@ -1,7 +1,7 @@
 package com.promptscanner.backend.controller;
 
+import com.promptscanner.backend.dto.ScanRecordResponse;
 import com.promptscanner.backend.dto.ScanResponse;
-import com.promptscanner.backend.entity.ScanRecord;
 import com.promptscanner.backend.repository.ScanRecordRepository;
 import com.promptscanner.backend.service.ScanOrchestrationService;
 import org.springframework.http.ResponseEntity;
@@ -24,8 +24,10 @@ public class ScanController {
     }
 
     @GetMapping("/history")
-    public ResponseEntity<List<ScanRecord>> getHistory() {
-        return ResponseEntity.ok(scanRecordRepository.findAllByOrderByScanDateDesc());
+    public ResponseEntity<List<ScanRecordResponse>> getHistory() {
+        return ResponseEntity.ok(scanRecordRepository.findAllByOrderByScanDateDesc().stream()
+                .map(ScanRecordResponse::from)
+                .toList());
     }
 
     @PostMapping("/scan")

@@ -1,17 +1,23 @@
 package com.promptscanner.backend.service;
 
 import com.promptscanner.backend.dto.ScanResponse;
-import com.promptscanner.backend.entity.ScanRecord;
-import com.promptscanner.backend.repository.ScanRecordRepository;
+import com.promptscanner.backend.entity.HeuristicRule;
+import com.promptscanner.backend.repository.HeuristicRuleRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * Runs the enabled checks over one document and assembles the response.
+ *
+ * This is the only place that knows about both rules and PDFs: it reads the
+ * active rule set and hands the derived highlight words down to extraction, so
+ * the lower-level services stay free of persistence concerns.
+ */
 @Service
 public class ScanOrchestrationService {
 
@@ -20,90 +26,74 @@ public class ScanOrchestrationService {
     private final PdfScannerService pdfScannerService;
     private final HeuristicScannerService heuristicScannerService;
     private final LlmScannerService llmScannerService;
-    private final ScanRecordRepository scanRecordRepository;
+    private final HeuristicRuleRepository heuristicRuleRepository;
+    private final ScanHistoryService scanHistoryService;
 
     public ScanOrchestrationService(PdfScannerService pdfScannerService,
                                     HeuristicScannerService heuristicScannerService,
                                     LlmScannerService llmScannerService,
-                                    ScanRecordRepository scanRecordRepository) {
+                                    HeuristicRuleRepository heuristicRuleRepository,
+                                    ScanHistoryService scanHistoryService) {
         this.pdfScannerService = pdfScannerService;
         this.heuristicScannerService = heuristicScannerService;
         this.llmScannerService = llmScannerService;
-        this.scanRecordRepository = scanRecordRepository;
+        this.heuristicRuleRepository = heuristicRuleRepository;
+        this.scanHistoryService = scanHistoryService;
     }
 
-    public ScanResponse orchestrateScan(MultipartFile file, boolean useLLM, boolean useHeuristics) throws IOException {
+    public ScanResponse orchestrateScan(MultipartFile file, boolean useLLM, boolean useHeuristics)
+            throws IOException {
         ScanResponse response = new ScanResponse();
         String fileName = file.getOriginalFilename();
         log.info("Orchestrating scan for file: {} | Size: {} bytes", fileName, file.getSize());
 
-        // Extract text and render preview using PDFBox
-        PdfScannerService.PdfData pdfData = pdfScannerService.processPdf(file);
+        List<String> literalPhrases = heuristicRuleRepository.findByIsActiveTrue().stream()
+                .filter(rule -> !rule.isRegex())
+                .map(HeuristicRule::getPhrase)
+                .toList();
+
+        PdfScannerService.PdfData pdfData =
+                pdfScannerService.processPdf(file, PdfScannerService.highlightWordsFrom(literalPhrases));
+
         String extractedText = pdfData.extractedText();
         response.setPreviewImagesBase64(pdfData.previewImagesBase64());
         response.setPreviewPageNumbers(pdfData.previewPageNumbers());
-        
-        if (log.isDebugEnabled() && extractedText != null) {
-            log.debug("Extracted Text Preview: {}...", extractedText.substring(0, Math.min(extractedText.length(), 200)));
-        }
 
         boolean isOverallSafe = true;
-        String hFlagsStr = "";
-        String lExplanation = "";
-        String vFlagsStr = "";
-        String sFlagsStr = "";
 
-        // Visual Obfuscation Scan
+        // Visual obfuscation
         List<String> voFindings = pdfData.visualObfuscationFindings();
-        boolean isVoSafe = voFindings.isEmpty();
-        ScanResponse.VisualObfuscationResult voResult = new ScanResponse.VisualObfuscationResult(isVoSafe, voFindings);
-        response.setVisualObfuscationResult(voResult);
-        if (!isVoSafe) {
+        response.setVisualObfuscationResult(
+                new ScanResponse.VisualObfuscationResult(voFindings.isEmpty(), voFindings));
+        if (!voFindings.isEmpty()) {
             isOverallSafe = false;
-            vFlagsStr = String.join(" | ", voFindings);
         }
 
-        // Document Structure Scan (metadata, annotations, active content)
+        // Document structure: metadata, annotations, active content
         List<String> structureFindings = pdfData.structureFindings();
-        boolean isStructureSafe = structureFindings.isEmpty();
         response.setDocumentStructureResult(
-                new ScanResponse.DocumentStructureResult(isStructureSafe, structureFindings));
-        if (!isStructureSafe) {
+                new ScanResponse.DocumentStructureResult(structureFindings.isEmpty(), structureFindings));
+        if (!structureFindings.isEmpty()) {
             isOverallSafe = false;
-            sFlagsStr = String.join(" | ", structureFindings);
         }
 
-        // Heuristic Scan
         if (useHeuristics) {
             ScanResponse.HeuristicResult hResult = heuristicScannerService.scan(extractedText);
             response.setHeuristicResult(hResult);
             if (!hResult.isSafe()) {
                 isOverallSafe = false;
-                hFlagsStr = String.join(", ", hResult.getFlags());
             }
         }
 
-        // LLM Scan
         if (useLLM) {
             ScanResponse.LlmResult lResult = llmScannerService.scan(extractedText);
             response.setLlmResult(lResult);
             if (!lResult.isSafe()) {
                 isOverallSafe = false;
             }
-            lExplanation = lResult.getAnalysis();
         }
 
-        // Save to database
-        ScanRecord record = new ScanRecord();
-        record.setFileName(fileName);
-        record.setScanDate(LocalDateTime.now());
-        record.setSafe(isOverallSafe);
-        record.setHeuristicFlags(hFlagsStr);
-        record.setLlmExplanation(lExplanation);
-        record.setVisualFlags(vFlagsStr);
-        record.setStructureFlags(sFlagsStr);
-        scanRecordRepository.save(record);
-
+        scanHistoryService.record(fileName, isOverallSafe, response);
         return response;
     }
 }

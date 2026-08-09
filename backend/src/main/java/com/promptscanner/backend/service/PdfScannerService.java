@@ -3,11 +3,7 @@ package com.promptscanner.backend.service;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
-import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
-import org.apache.pdfbox.pdmodel.graphics.blend.BlendMode;
-import org.apache.pdfbox.pdmodel.graphics.state.PDExtendedGraphicsState;
-import org.apache.pdfbox.rendering.PDFRenderer;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import net.sourceforge.tess4j.Tesseract;
@@ -16,27 +12,31 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import jakarta.annotation.PostConstruct;
 
-import javax.imageio.ImageIO;
-import java.awt.Color;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Base64;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import com.promptscanner.backend.entity.HeuristicRule;
-import com.promptscanner.backend.repository.HeuristicRuleRepository;
 
+/**
+ * Extracts everything analysable from an uploaded PDF: page text, OCR of embedded
+ * images, hidden-surface content, and highlighted page previews.
+ *
+ * Note what this class does NOT do: it holds no repository and knows nothing
+ * about heuristic rules. The words to highlight are passed in by the caller, so
+ * extraction can be exercised without a database behind it.
+ */
 @Service
 public class PdfScannerService {
 
     private static final Logger log = LoggerFactory.getLogger(PdfScannerService.class);
 
-    private final HeuristicRuleRepository heuristicRuleRepository;
+    private static final int MAX_OCR_PAGES = 5;
+    private static final int MAX_OCR_IMAGES = 10;
+
     private final PdfStructureScanner pdfStructureScanner;
+    private final PdfPreviewRenderer previewRenderer;
 
     @Value("${ocr.tessdata.path:}")
     private String tessDataPath;
@@ -44,40 +44,12 @@ public class PdfScannerService {
     @Value("${app.scan.max-pages:50}")
     private int maxPages;
 
-    /** Nominal preview resolution, reduced automatically for oversized pages. */
-    private static final float PREVIEW_DPI = 150f;
-
-    /**
-     * Page dimensions come from the uploaded file, and the PDF spec allows a
-     * 14400x14400pt MediaBox. At 150 DPI that is 30000x30000px -- a 3.6 GB bitmap
-     * from a ~600 byte upload. Capping total output pixels keeps render cost
-     * bounded regardless of what the document declares.
-     */
-    private static final double MAX_PREVIEW_PIXELS = 4_000_000d; // ~4 MP, well above a 150 DPI A4 page
-    private static final float MIN_PREVIEW_DPI = 12f;
-
-    /** Chooses the largest DPI up to {@link #PREVIEW_DPI} that stays within the pixel budget. */
-    static float previewDpiFor(PDRectangle mediaBox) {
-        float widthIn = Math.abs(mediaBox.getWidth()) / 72f;
-        float heightIn = Math.abs(mediaBox.getHeight()) / 72f;
-        if (widthIn <= 0 || heightIn <= 0) {
-            return PREVIEW_DPI;
-        }
-        double pixelsAtFullDpi = (widthIn * PREVIEW_DPI) * (heightIn * PREVIEW_DPI);
-        if (pixelsAtFullDpi <= MAX_PREVIEW_PIXELS) {
-            return PREVIEW_DPI;
-        }
-        float scaled = (float) Math.sqrt(MAX_PREVIEW_PIXELS / (widthIn * heightIn));
-        return Math.max(MIN_PREVIEW_DPI, scaled);
-    }
-
     // Use ThreadLocal to cache Tesseract instances across requests safely
     private ThreadLocal<Tesseract> tesseractThreadLocal;
 
-    public PdfScannerService(HeuristicRuleRepository heuristicRuleRepository,
-                             PdfStructureScanner pdfStructureScanner) {
-        this.heuristicRuleRepository = heuristicRuleRepository;
+    public PdfScannerService(PdfStructureScanner pdfStructureScanner, PdfPreviewRenderer previewRenderer) {
         this.pdfStructureScanner = pdfStructureScanner;
+        this.previewRenderer = previewRenderer;
     }
 
     @PostConstruct
@@ -110,140 +82,94 @@ public class PdfScannerService {
         List<Integer> previewPageNumbers
     ) {}
 
-    public PdfData processPdf(MultipartFile file) throws IOException {
-        // Build active highlight words dynamically
-        List<HeuristicRule> activeRules = heuristicRuleRepository.findByIsActiveTrue();
-        Set<String> highlightWords = new HashSet<>();
-        for (HeuristicRule rule : activeRules) {
-            if (!rule.isRegex()) {
-                String[] words = rule.getPhrase().toLowerCase().split("[\\W_]+");
-                for (String w : words) {
-                    if (w.length() > 3) {
-                        highlightWords.add(w);
-                    }
-                }
-            }
-        }
-        if (highlightWords.isEmpty()) {
-            highlightWords.addAll(List.of("ignore", "previous", "instructions", "system", "message", "prompt", "bypass"));
-        }
-
-        List<String> previewImagesBase64 = new ArrayList<>();
-        List<Integer> previewPageNumbers = new ArrayList<>();
-        String extractedTextContent;
-        List<String> visualObfuscationFindings;
-        List<String> structureFindings;
-
+    /**
+     * @param highlightWords lowercase words to highlight in the rendered previews,
+     *                       supplied by the caller from the active rule set
+     */
+    public PdfData processPdf(MultipartFile file, Set<String> highlightWords) throws IOException {
         try (PDDocument document = Loader.loadPDF(file.getBytes())) {
             if (document.getNumberOfPages() > maxPages) {
-                throw new IllegalArgumentException("PDF exceeds maximum allowed page count of " + maxPages + " pages (found " + document.getNumberOfPages() + ").");
+                throw new IllegalArgumentException("PDF exceeds maximum allowed page count of " + maxPages
+                        + " pages (found " + document.getNumberOfPages() + ").");
             }
-            
+
             HighlightingTextStripper stripper = new HighlightingTextStripper(highlightWords);
             stripper.setSortByPosition(true);
-            extractedTextContent = stripper.getText(document);
-            visualObfuscationFindings = stripper.getVisualObfuscationFindings();
+            String extractedText = stripper.getText(document);
+            List<String> visualFindings = stripper.getVisualObfuscationFindings();
             Map<Integer, List<PDRectangle>> highlightsPerPage = stripper.getHighlightsPerPage();
 
             // Metadata, annotations and bookmarks never appear in the page content
             // stream, so they are recovered separately and appended below.
             PdfStructureScanner.StructureData structure = pdfStructureScanner.scan(document);
-            structureFindings = structure.findings();
             if (!structure.hiddenText().isBlank()) {
-                extractedTextContent += "\n\n--- DOCUMENT METADATA & ANNOTATIONS ---\n" + structure.hiddenText();
+                extractedText += "\n\n--- DOCUMENT METADATA & ANNOTATIONS ---\n" + structure.hiddenText();
             }
 
-            StringBuilder ocrText = new StringBuilder();
-            Tesseract tesseract = tesseractThreadLocal.get();
-            
-            int ocrImageCount = 0;
-            int maxOcrPages = Math.min(document.getNumberOfPages(), 5); // limit OCR to first 5 pages
-            for (int i = 0; i < maxOcrPages; i++) {
-                if (ocrImageCount >= 10) {
-                    log.info("Reached maximum OCR image limit (10). Skipping remaining images.");
+            String ocrText = runOcr(document);
+            if (!ocrText.isEmpty()) {
+                log.debug("Extracted OCR text length: {}", ocrText.length());
+                extractedText += "\n\n--- OCR EXTRACTED TEXT ---\n" + ocrText;
+            }
+
+            PdfPreviewRenderer.Previews previews = previewRenderer.render(document, highlightsPerPage);
+
+            return new PdfData(extractedText, previews.imagesBase64(), visualFindings,
+                    structure.findings(), previews.pageNumbers());
+        }
+    }
+
+    private String runOcr(PDDocument document) {
+        StringBuilder ocrText = new StringBuilder();
+        Tesseract tesseract = tesseractThreadLocal.get();
+        int imageCount = 0;
+        int pageLimit = Math.min(document.getNumberOfPages(), MAX_OCR_PAGES);
+
+        for (int i = 0; i < pageLimit && imageCount < MAX_OCR_IMAGES; i++) {
+            PDPage page = document.getPage(i);
+            org.apache.pdfbox.pdmodel.PDResources resources = page.getResources();
+            if (resources == null) {
+                continue;
+            }
+            for (org.apache.pdfbox.cos.COSName name : resources.getXObjectNames()) {
+                if (imageCount >= MAX_OCR_IMAGES) {
+                    log.info("Reached maximum OCR image limit ({}). Skipping remaining images.", MAX_OCR_IMAGES);
                     break;
                 }
-                PDPage page = document.getPage(i);
-                org.apache.pdfbox.pdmodel.PDResources resources = page.getResources();
-                if (resources != null) {
-                    for (org.apache.pdfbox.cos.COSName name : resources.getXObjectNames()) {
-                        try {
-                            if (resources.isImageXObject(name)) {
-                                if (ocrImageCount >= 10) break;
-                                ocrImageCount++;
-                                org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject image = (org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject) resources.getXObject(name);
-                                BufferedImage bim = image.getImage();
-                                String result = tesseract.doOCR(bim);
-                                ocrText.append(result).append("\n");
-                            }
-                        } catch (Exception e) {
-                            log.warn("OCR Error on image {}: {}", name.getName(), e.getMessage());
-                        }
+                try {
+                    if (!resources.isImageXObject(name)) {
+                        continue;
                     }
+                    imageCount++;
+                    var image = (org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject) resources.getXObject(name);
+                    BufferedImage bim = image.getImage();
+                    ocrText.append(tesseract.doOCR(bim)).append("\n");
+                } catch (Exception e) {
+                    log.warn("OCR Error on image {}: {}", name.getName(), e.getMessage());
                 }
-            }
-
-            if (ocrText.length() > 0) {
-                log.debug("Extracted OCR Text length: {}", ocrText.length());
-                extractedTextContent += "\n\n--- OCR EXTRACTED TEXT ---\n" + ocrText.toString();
-            }
-
-            // Determine which pages to render (pages with highlights, or just the first page if none)
-            List<Integer> pagesToRender = new ArrayList<>(highlightsPerPage.keySet());
-            if (pagesToRender.isEmpty() && document.getNumberOfPages() > 0) {
-                pagesToRender.add(0); // Render first page by default so the UI isn't empty
-            }
-            if (pagesToRender.size() > 5) {
-                log.info("Limiting page rendering preview to first 5 flagged pages out of {}", pagesToRender.size());
-                pagesToRender = pagesToRender.subList(0, 5);
-            }
-
-            PDFRenderer pdfRenderer = new PDFRenderer(document);
-
-            for (int pageIndex : pagesToRender) {
-                if (pageIndex < 0 || pageIndex >= document.getNumberOfPages()) continue;
-                
-                PDPage page = document.getPage(pageIndex);
-                List<PDRectangle> rects = highlightsPerPage.getOrDefault(pageIndex, new ArrayList<>());
-
-                // Draw Highlights for this page
-                if (!rects.isEmpty()) {
-                    try (PDPageContentStream cs = new PDPageContentStream(document, page, PDPageContentStream.AppendMode.APPEND, true, true)) {
-                        PDExtendedGraphicsState graphicsState = new PDExtendedGraphicsState();
-                        graphicsState.setNonStrokingAlphaConstant(0.4f);
-                        graphicsState.setBlendMode(BlendMode.MULTIPLY);
-                        cs.setGraphicsStateParameters(graphicsState);
-                        cs.setNonStrokingColor(Color.YELLOW);
-                        
-                        for (PDRectangle rect : rects) {
-                            float x = rect.getLowerLeftX();
-                            float pageHeight = page.getMediaBox().getHeight();
-                            float y = pageHeight - rect.getUpperRightY(); 
-                            float width = rect.getWidth();
-                            float height = rect.getHeight();
-                            
-                            cs.addRect(x, y, width, height);
-                            cs.fill();
-                        }
-                    }
-                }
-
-                // Render the page to image, backing off the DPI for oversized pages
-                float dpi = previewDpiFor(page.getMediaBox());
-                if (dpi < PREVIEW_DPI) {
-                    log.warn("Page {} is {}x{}pt; reducing preview to {} DPI to stay within the pixel budget.",
-                            pageIndex + 1, page.getMediaBox().getWidth(), page.getMediaBox().getHeight(), dpi);
-                }
-                BufferedImage bim = pdfRenderer.renderImageWithDPI(pageIndex, dpi);
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                ImageIO.write(bim, "png", baos);
-                byte[] imageBytes = baos.toByteArray();
-                previewImagesBase64.add("data:image/png;base64," + Base64.getEncoder().encodeToString(imageBytes));
-                previewPageNumbers.add(pageIndex + 1);
             }
         }
+        return ocrText.toString();
+    }
 
-        return new PdfData(extractedTextContent, previewImagesBase64, visualObfuscationFindings,
-                structureFindings, previewPageNumbers);
+    /** Derives the words worth highlighting in previews from the active literal rules. */
+    public static Set<String> highlightWordsFrom(List<String> literalPhrases) {
+        Set<String> words = new java.util.HashSet<>();
+        for (String phrase : literalPhrases) {
+            for (String w : phrase.toLowerCase().split("[\\W_]+")) {
+                if (w.length() > 3) {
+                    words.add(w);
+                }
+            }
+        }
+        if (words.isEmpty()) {
+            words.addAll(List.of("ignore", "previous", "instructions", "system", "message", "prompt", "bypass"));
+        }
+        return words;
+    }
+
+    /** Kept for callers that have no rule context. */
+    public PdfData processPdf(MultipartFile file) throws IOException {
+        return processPdf(file, highlightWordsFrom(new ArrayList<>()));
     }
 }

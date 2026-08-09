@@ -1,19 +1,57 @@
-# Java / Maven
-backend/target/
-backend/*.pdf
-backend/.mvn/wrapper/maven-wrapper.jar
-
-# Node / React
-frontend/node_modules/
-frontend/dist/
-
-# OS
-.DS_Store
-
-# Secrets
+# ===== Secrets & local configuration =====
+# Never commit these. application-secrets.properties holds the Gemini and admin
+# API keys; .env holds the frontend's backend URL and any local overrides.
 backend/src/main/resources/application-secrets.properties
 backend/application-secrets.properties
 .env
+.env.*
+!.env.example
 
-# Database
+# ===== Local data =====
+# SQLite database plus the journal/WAL sidecars it creates while running.
 *.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# ===== Java / Maven =====
+backend/target/
+*.class
+# The wrapper runs in script-only mode (see .mvn/wrapper/maven-wrapper.properties),
+# so no jar is vendored; this stays in case the wrapper mode ever changes.
+backend/.mvn/wrapper/maven-wrapper.jar
+
+# ===== Node / Vite =====
+node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/.vite/
+
+# ===== Logs =====
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ===== Editors & IDEs =====
+# These live at the repo root; backend/.gitignore covers the same for its subtree.
+.vscode/
+.idea/
+*.iml
+*.iws
+*.ipr
+*.swp
+*.swo
+*~
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== Local scratch =====
+# Ad-hoc PDFs dropped in backend/ while testing. Note this is anchored to
+# backend/ only, so committed fixtures under src/ and frontend/public/samples/
+# are unaffected.
+backend/*.pdf

@@ -96,6 +96,45 @@ class ScanControllerTest {
     }
 
     @Test
+    void createRule_IgnoresClientSuppliedId() throws Exception {
+        // The request DTO has no id field, so a client cannot steer which row is
+        // written. Previously the JPA entity was bound directly from the body.
+        mockMvc.perform(post("/api/rules")
+                        .header("X-Admin-Api-Key", "test-admin-secret-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"id\": 4242, \"phrase\": \"mass-assignment-probe\", \"isRegex\": false, \"active\": true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(org.hamcrest.Matchers.not(4242)))
+                .andExpect(jsonPath("$.phrase").value("mass-assignment-probe"));
+    }
+
+    @Test
+    void createRule_WithInvalidRegex_ReturnsBadRequest() throws Exception {
+        mockMvc.perform(post("/api/rules")
+                        .header("X-Admin-Api-Key", "test-admin-secret-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phrase\": \"[a-z\", \"isRegex\": true, \"active\": true}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void getRules_ResponseShapeIsStable() throws Exception {
+        mockMvc.perform(post("/api/rules")
+                        .header("X-Admin-Api-Key", "test-admin-secret-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phrase\": \"shape-check\", \"isRegex\": false, \"active\": true}"))
+                .andExpect(status().isOk());
+
+        // Field names the frontend depends on must survive the DTO boundary
+        mockMvc.perform(get("/api/rules"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").exists())
+                .andExpect(jsonPath("$[0].phrase").exists())
+                .andExpect(jsonPath("$[0].isRegex").exists())
+                .andExpect(jsonPath("$[0].active").exists());
+    }
+
+    @Test
     void scanPdf_WithEmptyFile_ReturnsBadRequest() throws Exception {
         MockMultipartFile emptyFile = new MockMultipartFile("file", "empty.pdf", "application/pdf", new byte[0]);
 

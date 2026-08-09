@@ -1,5 +1,7 @@
 package com.promptscanner.backend.controller;
 
+import com.promptscanner.backend.dto.HeuristicRuleRequest;
+import com.promptscanner.backend.dto.HeuristicRuleResponse;
 import com.promptscanner.backend.entity.HeuristicRule;
 import com.promptscanner.backend.repository.HeuristicRuleRepository;
 import org.springframework.http.ResponseEntity;
@@ -20,50 +22,38 @@ public class RulesController {
     }
 
     @GetMapping("/rules")
-    public ResponseEntity<List<HeuristicRule>> getRules() {
-        return ResponseEntity.ok(heuristicRuleRepository.findAll());
-    }
-
-    /**
-     * An unparseable regex is silently skipped at scan time, so a rule saved with one
-     * would show as "Active" while never matching anything. Reject it at the door.
-     */
-    private void validateRegex(HeuristicRule rule) {
-        if (Boolean.TRUE.equals(rule.getIsRegex()) && rule.getPhrase() != null) {
-            try {
-                Pattern.compile(rule.getPhrase());
-            } catch (PatternSyntaxException e) {
-                throw new IllegalArgumentException("Invalid regular expression: " + e.getDescription());
-            }
-        }
+    public ResponseEntity<List<HeuristicRuleResponse>> getRules() {
+        return ResponseEntity.ok(heuristicRuleRepository.findAll().stream()
+                .map(HeuristicRuleResponse::from)
+                .toList());
     }
 
     @PostMapping("/rules")
-    public ResponseEntity<HeuristicRule> createRule(@RequestBody HeuristicRule rule) {
-        if (rule.getPhrase() == null || rule.getPhrase().trim().isEmpty()) {
+    public ResponseEntity<HeuristicRuleResponse> createRule(@RequestBody HeuristicRuleRequest request) {
+        if (!request.hasPhrase()) {
             return ResponseEntity.badRequest().build();
         }
-        validateRegex(rule);
-        // Default active to true only if not provided
-        if (rule.getIsActive() == null) {
-            rule.setActive(true);
-        }
-        // Default isRegex to false if not provided
-        if (rule.getIsRegex() == null) {
-            rule.setRegex(false);
-        }
-        return ResponseEntity.ok(heuristicRuleRepository.save(rule));
+        validateRegex(request);
+
+        HeuristicRule rule = new HeuristicRule(
+                request.phrase().trim(), request.regexOrDefault(), request.activeOrDefault());
+        return ResponseEntity.ok(HeuristicRuleResponse.from(heuristicRuleRepository.save(rule)));
     }
 
     @PutMapping("/rules/{id}")
-    public ResponseEntity<HeuristicRule> updateRule(@PathVariable("id") Long id, @RequestBody HeuristicRule updatedRule) {
-        validateRegex(updatedRule);
+    public ResponseEntity<HeuristicRuleResponse> updateRule(@PathVariable("id") Long id,
+                                                            @RequestBody HeuristicRuleRequest request) {
+        if (!request.hasPhrase()) {
+            return ResponseEntity.badRequest().build();
+        }
+        validateRegex(request);
+
         return heuristicRuleRepository.findById(id)
                 .map(rule -> {
-                    rule.setPhrase(updatedRule.getPhrase());
-                    rule.setRegex(updatedRule.isRegex());
-                    rule.setActive(updatedRule.isActive());
-                    return ResponseEntity.ok(heuristicRuleRepository.save(rule));
+                    rule.setPhrase(request.phrase().trim());
+                    rule.setRegex(request.regexOrDefault());
+                    rule.setActive(request.activeOrDefault());
+                    return ResponseEntity.ok(HeuristicRuleResponse.from(heuristicRuleRepository.save(rule)));
                 })
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -75,5 +65,19 @@ public class RulesController {
             return ResponseEntity.ok().build();
         }
         return ResponseEntity.notFound().build();
+    }
+
+    /**
+     * An unparseable regex is silently skipped at scan time, so a rule saved with one
+     * would show as "Active" while never matching anything. Reject it at the door.
+     */
+    private void validateRegex(HeuristicRuleRequest request) {
+        if (request.regexOrDefault()) {
+            try {
+                Pattern.compile(request.phrase());
+            } catch (PatternSyntaxException e) {
+                throw new IllegalArgumentException("Invalid regular expression: " + e.getDescription());
+            }
+        }
     }
 }
