@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings, Plus, Trash2, Edit2, Save, X, ToggleLeft, ToggleRight, HelpCircle, Key } from 'lucide-react';
+import { Plus, Trash2, Edit2, Save, X, ToggleLeft, ToggleRight, HelpCircle, Key } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { HeuristicRule } from '../types';
 
@@ -209,14 +209,16 @@ export default function RulesManager() {
   };
 
   return (
-    <div className="main-content single-column">
-      <div className="card">
-        <h2 className="card-title">
-          <Settings size={18} />
-          Heuristics Rules
-        </h2>
+    <>
+      <div className="page-header">
+        <h2>Heuristic rules</h2>
+        <p>
+          Literal phrases and regular expressions the scanner matches against text
+          recovered from a document, including its metadata and annotations.
+        </p>
+      </div>
 
-        {/* Admin Secret Configuration Section */}
+      <div className="rules-layout">
         <div className="admin-key-panel">
           <label htmlFor="admin-key">
             <Key size={14} />
@@ -271,14 +273,20 @@ export default function RulesManager() {
 
         {loading ? (
           <div className="empty-state">
-            Loading rules…
+            <span>Loading rules…</span>
           </div>
         ) : rules.length === 0 ? (
           <div className="empty-state">
-            No heuristic rules defined yet.
+            <strong>No rules defined</strong>
+            <span>The scanner cannot flag phrases until at least one rule is active.</span>
           </div>
         ) : (
-          <div className="history-table-container rules-table">
+          <>
+          <div className="section-head">
+            <span className="eyebrow">Rules</span>
+            <span className="eyebrow tabular">{rules.filter(r => r.active).length} active / {rules.length}</span>
+          </div>
+          <div className="table-wrap">
             <table>
               <thead>
                 <tr>
@@ -316,8 +324,8 @@ export default function RulesManager() {
                             Regex
                           </label>
                         ) : (
-                          <span className={`badge compact ${rule.isRegex ? 'info' : 'neutral'}`}>
-                            {rule.isRegex ? 'Regex' : 'Literal'}
+                          <span className="chip is-mono">
+                            {rule.isRegex ? 'regex' : 'literal'}
                           </span>
                         )}
                       </td>
@@ -361,8 +369,9 @@ export default function RulesManager() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
-    </div>
+    </>
   );
 }

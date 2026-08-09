@@ -142,10 +142,11 @@ function App() {
         position="top-right"
         toastOptions={{
           style: {
-            background: 'var(--surface-card)',
-            color: 'var(--text-primary)',
-            border: '1px solid var(--border-default)',
-            fontSize: 'var(--text-base)'
+            background: 'var(--surface)',
+            color: 'var(--ink)',
+            border: '1px solid var(--rule)',
+            fontSize: 'var(--t-small)',
+            borderRadius: 'var(--r-md)'
           }
         }}
       />
@@ -162,7 +163,7 @@ function App() {
           </p>
         </div>
         <main className="main-content">
-          <div>
+          <div className="rail">
             <UploadSection
               file={file}
               onFileSelected={acceptFile}
@@ -175,18 +176,14 @@ function App() {
               handleScan={handleScan}
             />
           </div>
-          <div className="results-aside">
-            <ResultsDashboard results={results} loading={loading} />
+          <div className="work">
+            <ResultsDashboard results={results} loading={loading} fileName={file?.name} />
             {/* Keep the guide visible until a *successful* scan replaces it, so an
                 error doesn't strand the user with no examples to retry from. */}
             {!loading && (!results || !!results.error) && (
               <>
-                <div className="card">
-                  <WelcomeGuide />
-                </div>
-                <div className="card">
-                  <ExamplePdfs onSelectSample={handleSelectSample} />
-                </div>
+                <WelcomeGuide />
+                <ExamplePdfs onSelectSample={handleSelectSample} />
               </>
             )}
           </div>

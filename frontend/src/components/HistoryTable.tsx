@@ -1,4 +1,4 @@
-import { History, CheckCircle, AlertTriangle, SearchX, KeyRound } from 'lucide-react';
+import { KeyRound } from 'lucide-react';
 import { ScanRecord } from '../types';
 
 interface HistoryTableProps {
@@ -8,62 +8,75 @@ interface HistoryTableProps {
 
 export default function HistoryTable({ history, error }: HistoryTableProps) {
   return (
-    <div className="card">
-      <h2 className="card-title">
-        <History size={18} />
-        Scan History
-      </h2>
+    <>
+      <div className="page-header">
+        <h2>Scan history</h2>
+        <p>Every document scanned by this instance, with the findings recorded at the time.</p>
+      </div>
+
       {error ? (
-        <div className="result-card warning">
-          <div className="result-header">
-            <h3><KeyRound size={16} /> Admin key required</h3>
-          </div>
-          <div className="result-content">
-            <p>{error}</p>
+        <div className="notice is-warn">
+          <KeyRound size={16} />
+          <div>
+            <strong>Admin key required</strong>
+            {error}
           </div>
         </div>
       ) : history.length === 0 ? (
         <div className="empty-state">
-          <SearchX size={40} />
-          <p>No scans have been performed yet.</p>
+          <strong>No scans recorded</strong>
+          <span>Results appear here once a document has been scanned.</span>
         </div>
       ) : (
-        <div className="history-table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>File Name</th>
-                <th>Status</th>
-                <th>Details</th>
-              </tr>
-            </thead>
-            <tbody>
-              {history.map(record => (
-                <tr key={record.id}>
-                  <td className="cell-nowrap">{new Date(record.scanDate).toLocaleString()}</td>
-                  <td className="cell-filename">{record.fileName}</td>
-                  <td>
-                    <span className={`badge ${record.safe ? 'safe' : 'danger'}`}>
-                      {record.safe ? <CheckCircle size={12} /> : <AlertTriangle size={12} />}
-                      {record.safe ? 'Secure' : 'Flagged'}
-                    </span>
-                  </td>
-                  <td className="cell-details">
-                    {(() => {
-                      const details = [];
-                      if (record.visualFlags) details.push(`[Visual: ${record.visualFlags}]`);
-                      if (record.heuristicFlags) details.push(`[Heuristics: ${record.heuristicFlags}]`);
-                      if (record.llmExplanation) details.push(`[AI: ${record.llmExplanation}]`);
-                      return details.length > 0 ? details.join(' ') : 'No issues found';
-                    })()}
-                  </td>
+        <>
+          <div className="section-head">
+            <span className="eyebrow">Records</span>
+            <span className="eyebrow tabular">{history.length}</span>
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Scanned</th>
+                  <th>Document</th>
+                  <th>Verdict</th>
+                  <th>Findings</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {history.map((record) => {
+                  const details = [
+                    record.visualFlags && `visual: ${record.visualFlags}`,
+                    record.structureFlags && `structure: ${record.structureFlags}`,
+                    record.heuristicFlags && `heuristic: ${record.heuristicFlags}`,
+                    record.llmExplanation && `ai: ${record.llmExplanation}`,
+                  ].filter(Boolean) as string[];
+
+                  return (
+                    <tr key={record.id}>
+                      <td className="cell-nowrap">
+                        {new Date(record.scanDate).toLocaleString(undefined, {
+                          year: 'numeric', month: 'short', day: '2-digit',
+                          hour: '2-digit', minute: '2-digit',
+                        })}
+                      </td>
+                      <td className="cell-filename">{record.fileName}</td>
+                      <td>
+                        <span className={`status ${record.safe ? 'is-safe' : 'is-danger'}`}>
+                          {record.safe ? 'Clean' : 'Flagged'}
+                        </span>
+                      </td>
+                      <td className="cell-details">
+                        {details.length > 0 ? details.join('\n') : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
-    </div>
+    </>
   );
 }

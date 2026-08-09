@@ -12,7 +12,8 @@ export interface ScanRecord {
   safe: boolean;
   heuristicFlags?: string;
   llmExplanation?: string;
-  visualFlags?: string; // for future feature 1
+  visualFlags?: string;
+  structureFlags?: string;
 }
 
 export interface HeuristicResult {

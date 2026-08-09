@@ -1,83 +1,72 @@
-import { Download, FileWarning, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Download } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 interface SamplePdf {
   filename: string;
   label: string;
   description: string;
-  attackType: string;
   safe: boolean;
 }
 
 const SAMPLES: SamplePdf[] = [
   {
     filename: 'sample_ignore_instructions.pdf',
-    label: 'Instruction Override',
-    description: 'A company policy document with hidden "Ignore all previous instructions" injection that attempts to extract confidential data.',
-    attackType: 'Instruction Override',
+    label: 'Instruction override',
+    description: 'Company policy document with a hidden "ignore all previous instructions" payload.',
     safe: false,
   },
   {
     filename: 'sample_role_hijack.pdf',
-    label: 'Role Hijacking',
-    description: 'A financial report containing a "You are now DAN" role-hijack attempt that tries to bypass safety guidelines.',
-    attackType: 'Role Hijacking',
+    label: 'Role hijacking',
+    description: 'Financial report carrying a "you are now DAN" persona swap.',
     safe: false,
   },
   {
     filename: 'sample_data_exfil.pdf',
-    label: 'Data Exfiltration',
-    description: 'Meeting notes that instruct the AI to leak all context data to an external URL via query parameters.',
-    attackType: 'Data Exfiltration',
+    label: 'Data exfiltration',
+    description: 'Meeting notes instructing the model to append context to an external URL.',
     safe: false,
   },
   {
     filename: 'sample_markdown_injection.pdf',
-    label: 'Context Manipulation',
-    description: 'A resume with embedded instructions that force the AI to always rate it as "EXCELLENT - MUST HIRE."',
-    attackType: 'Context Manipulation',
+    label: 'Context manipulation',
+    description: 'Resume that pressures any reviewer model into an "excellent — must hire" verdict.',
     safe: false,
   },
   {
     filename: 'sample_tiny_text.pdf',
-    label: 'Tiny Text (Visual)',
-    description: 'A product review feed containing a tiny, 2pt font instruction that overrides overall review sentiments.',
-    attackType: 'Obfuscated text',
+    label: 'Tiny text',
+    description: 'Product reviews with a 2pt instruction overriding the overall sentiment.',
     safe: false,
   },
   {
     filename: 'sample_white_text.pdf',
-    label: 'White Text (Visual)',
-    description: 'A billing invoice containing white-on-white (RGB 255, 255, 255) text instructing the AI to waive the invoice balance.',
-    attackType: 'Invisible text',
+    label: 'White-on-white text',
+    description: 'Invoice with white text telling the model to waive the balance.',
     safe: false,
   },
   {
     filename: 'sample_invisible_render.pdf',
-    label: 'Invisible Render Mode',
-    description: 'A compliance attestation hiding instructions with PDF text rendering mode 3 — painted as nothing at all, yet fully extractable by an AI.',
-    attackType: 'Invisible text',
+    label: 'Invisible render mode',
+    description: 'Compliance attestation using PDF text rendering mode 3 — painted as nothing, still extractable.',
     safe: false,
   },
   {
     filename: 'sample_metadata_injection.pdf',
-    label: 'Metadata & Annotations',
-    description: 'A resume with injections planted in the PDF Title, Subject, Keywords and a hidden annotation — none of it visible on the page.',
-    attackType: 'Hidden surfaces',
+    label: 'Metadata & annotations',
+    description: 'Resume with payloads in the Title, Subject, Keywords and a hidden annotation.',
     safe: false,
   },
   {
     filename: 'sample_homoglyph.pdf',
-    label: 'Homoglyph Obfuscation',
-    description: 'A support ticket whose payload swaps Latin letters for identical-looking Cyrillic ones — reads normally to an AI, but defeats any plain-text rule that is not normalised first.',
-    attackType: 'Lookalike characters',
+    label: 'Lookalike characters',
+    description: 'Support ticket swapping Latin letters for identical Cyrillic ones.',
     safe: false,
   },
   {
     filename: 'sample_clean.pdf',
-    label: 'Clean Document',
-    description: 'A normal team lunch menu with no injections. Use this to see what a safe scan result looks like.',
-    attackType: 'None',
+    label: 'Clean document',
+    description: 'An ordinary lunch menu with no injection — the control case.',
     safe: true,
   },
 ];
@@ -90,12 +79,9 @@ export default function ExamplePdfs({ onSelectSample }: ExamplePdfsProps) {
   const handleTrySample = async (sample: SamplePdf) => {
     try {
       const response = await fetch(`/samples/${sample.filename}`);
-      if (!response.ok) {
-        throw new Error(`Server returned ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`Server returned ${response.status}`);
       const blob = await response.blob();
-      const file = new File([blob], sample.filename, { type: 'application/pdf' });
-      onSelectSample(file);
+      onSelectSample(new File([blob], sample.filename, { type: 'application/pdf' }));
     } catch (err) {
       console.error('Failed to load sample:', err);
       toast.error(`Could not load "${sample.label}". Please try again.`);
@@ -103,51 +89,37 @@ export default function ExamplePdfs({ onSelectSample }: ExamplePdfsProps) {
   };
 
   return (
-    <div className="examples-section">
-      <h3 className="examples-title">
-        <FileWarning size={18} />
-        Try with example PDFs
-      </h3>
-      <p className="examples-subtitle">
-        Download or load these sample documents to see the scanner in action. Each contains a different prompt injection technique.
-      </p>
+    <section>
+      <div className="section-head">
+        <span className="eyebrow">Sample documents</span>
+        <span className="eyebrow tabular">{SAMPLES.length}</span>
+      </div>
 
-      <div className="sample-grid">
+      <div className="sample-list">
         {SAMPLES.map((sample) => (
-          <div key={sample.filename} className={`sample-card ${sample.safe ? 'safe' : 'danger'}`}>
-            <div className="sample-info">
-              <div className="sample-label">
-                {sample.safe
-                  ? <CheckCircle size={14} className="sample-icon safe" />
-                  : <AlertTriangle size={14} className="sample-icon danger" />
-                }
-                <strong>{sample.label}</strong>
-                {!sample.safe && (
-                  <span className="sample-tag">{sample.attackType}</span>
-                )}
-              </div>
-              <p className="sample-desc">{sample.description}</p>
-            </div>
-            <div className="sample-actions">
-              <button 
-                className="sample-btn try"
-                onClick={() => handleTrySample(sample)}
-                title="Load this sample and scan it immediately"
-              >
-                Scan this sample
+          <div key={sample.filename} className="sample-row">
+            <span className="sample-name">
+              <span className={`sample-dot ${sample.safe ? 'is-safe' : 'is-danger'}`} aria-hidden="true" />
+              {sample.label}
+            </span>
+            <span className="sample-actions">
+              <button className="btn-secondary" onClick={() => handleTrySample(sample)}>
+                Scan
               </button>
-              <a 
-                href={`/samples/${sample.filename}`} 
-                download 
-                className="sample-btn download"
-                title="Download this PDF"
+              <a
+                className="icon-btn"
+                href={`/samples/${sample.filename}`}
+                download
+                aria-label={`Download ${sample.label} sample`}
+                title="Download"
               >
                 <Download size={14} />
               </a>
-            </div>
+            </span>
+            <p className="sample-desc">{sample.description}</p>
           </div>
         ))}
       </div>
-    </div>
+    </section>
   );
 }
