@@ -3,51 +3,12 @@ import {
   AlertTriangle, ShieldCheck, HelpCircle, ChevronLeft, ChevronRight, Loader2,
 } from 'lucide-react';
 import { ScanResponse } from '../types';
+import { buildChecks, overallVerdict, Check } from '../verdict';
 
 interface ResultsDashboardProps {
   results: ScanResponse | null;
   loading: boolean;
   fileName?: string;
-}
-
-type State = 'danger' | 'safe' | 'warn' | 'muted';
-
-interface Check {
-  name: string;
-  state: State;
-  label: string;
-  /** Recovered document text — rendered as quoted evidence. */
-  evidence?: string[];
-  /** Our own prose about the check — rendered as ordinary copy. */
-  note?: string;
-}
-
-/**
- * Collapses the individual checks into the single answer the user came for.
- * A heuristic engine with no rules loaded is inconclusive rather than clean:
- * it examined nothing, so it cannot vouch for the file.
- */
-function overallVerdict(checks: Check[]) {
-  if (checks.some((c) => c.state === 'danger')) {
-    const n = checks.filter((c) => c.state === 'danger').length;
-    return {
-      state: 'danger' as const,
-      headline: 'Injection detected',
-      summary: `${n} of ${checks.length} check${checks.length === 1 ? '' : 's'} flagged this document. Do not pass it to an AI system unmodified.`,
-    };
-  }
-  if (checks.some((c) => c.state === 'warn')) {
-    return {
-      state: 'warn' as const,
-      headline: 'Inconclusive',
-      summary: 'A check could not run properly, so this document has not been fully examined.',
-    };
-  }
-  return {
-    state: 'safe' as const,
-    headline: 'No injection found',
-    summary: `All ${checks.length} checks passed. No hidden instructions, disguised text, or suspicious document structure were detected.`,
-  };
 }
 
 export default function ResultsDashboard({ results, loading, fileName }: ResultsDashboardProps) {
@@ -94,53 +55,7 @@ export default function ResultsDashboard({ results, loading, fileName }: Results
     );
   }
 
-  const checks: Check[] = [];
-
-  if (results.visualObfuscationResult) {
-    const r = results.visualObfuscationResult;
-    checks.push({
-      name: 'Visual obfuscation',
-      state: r.safe ? 'safe' : 'danger',
-      label: r.safe ? 'Clean' : `${r.findings?.length ?? 0} finding${r.findings?.length === 1 ? '' : 's'}`,
-      evidence: r.safe ? undefined : r.findings,
-      note: r.safe ? 'No invisible, transparent, or microscopic text.' : undefined,
-    });
-  }
-
-  if (results.documentStructureResult) {
-    const r = results.documentStructureResult;
-    checks.push({
-      name: 'Document structure',
-      state: r.safe ? 'safe' : 'danger',
-      label: r.safe ? 'Clean' : `${r.findings?.length ?? 0} finding${r.findings?.length === 1 ? '' : 's'}`,
-      evidence: r.safe ? undefined : r.findings,
-      note: r.safe ? 'No hidden metadata, annotations, or active content.' : undefined,
-    });
-  }
-
-  if (results.heuristicResult) {
-    const r = results.heuristicResult;
-    const notConfigured = r.activeRuleCount === 0;
-    checks.push({
-      name: 'Heuristic rules',
-      state: notConfigured ? 'warn' : r.safe ? 'safe' : 'danger',
-      label: notConfigured ? 'Not configured' : r.safe ? 'Clean' : `${r.flags?.length ?? 0} match${r.flags?.length === 1 ? '' : 'es'}`,
-      evidence: r.safe ? undefined : r.flags,
-      note: r.safe && !notConfigured
-        ? `No known patterns matched across ${r.activeRuleCount} active rule${r.activeRuleCount === 1 ? '' : 's'}.`
-        : undefined,
-    });
-  }
-
-  if (results.llmResult) {
-    const r = results.llmResult;
-    checks.push({
-      name: 'AI context analysis',
-      state: r.safe ? 'safe' : 'danger',
-      label: r.safe ? 'Clean' : 'Flagged',
-      note: r.analysis,
-    });
-  }
+  const checks: Check[] = buildChecks(results);
 
   const verdict = overallVerdict(checks);
   const previews = results.previewImagesBase64 ?? [];

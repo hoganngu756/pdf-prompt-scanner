@@ -10,8 +10,7 @@ import { Toaster, toast } from 'react-hot-toast'
 import { ScanResponse, ScanRecord } from './types'
 import './index.css'
 
-import { API_BASE_URL } from './config'
-import { withAdminKey } from './adminKey'
+import { api, ApiError } from './api'
 
 function App() {
   const [file, setFile] = useState<File | null>(null)
@@ -28,20 +27,17 @@ function App() {
     setHistoryError(null)
     try {
       // History exposes other users' filenames and analyses, so it is credentialed
-      const res = await fetch(`${API_BASE_URL}/history`, { headers: withAdminKey() })
-      if (res.status === 401 || res.status === 503) {
-        const msg = 'Scan history requires an Admin API Key. Enter it in the Rules tab.'
-        setHistoryError(msg)
+      setHistory(await api.history())
+    } catch (err) {
+      console.error('Failed to fetch history:', err)
+      if (err instanceof ApiError && err.isAuthProblem) {
+        setHistoryError('Scan history requires an Admin API Key. Enter it in the Rules tab.')
         setHistory([])
         return
       }
-      if (!res.ok) throw new Error('Network response was not ok')
-      const data = await res.json()
-      setHistory(data)
-    } catch (err) {
-      console.error('Failed to fetch history:', err)
-      setHistoryError('Failed to fetch scan history.')
-      toast.error('Failed to fetch scan history')
+      const message = err instanceof Error ? err.message : 'Failed to fetch scan history.'
+      setHistoryError(message)
+      toast.error(message)
     }
   }
 
@@ -87,35 +83,12 @@ function App() {
     setLoading(true)
     setResults(null)
 
-    const formData = new FormData()
-    formData.append('file', targetFile)
-    formData.append('useLLM', String(useLLM))
-    formData.append('useHeuristics', String(useHeuristics))
-
     try {
-      const response = await fetch(`${API_BASE_URL}/scan`, {
-        method: 'POST',
-        body: formData,
-      })
-      
-      let data: any;
-      const contentType = response.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
-        data = await response.json();
-      } else {
-        const text = await response.text();
-        data = { error: text || `Server returned error status ${response.status}` };
-      }
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to scan document')
-      }
-      
-      setResults(data)
-      toast.success('Scan completed successfully')
+      setResults(await api.scan(targetFile, useLLM, useHeuristics))
+      toast.success('Scan complete')
     } catch (error) {
       console.error('Error during scan:', error)
-      const errorMsg = error instanceof Error ? error.message : 'Failed to connect to the server';
+      const errorMsg = error instanceof Error ? error.message : 'Failed to connect to the server'
       toast.error(errorMsg)
       setResults({ error: errorMsg })
     } finally {

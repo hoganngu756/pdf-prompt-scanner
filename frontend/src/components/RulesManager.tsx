@@ -3,7 +3,7 @@ import { Plus, Trash2, Edit2, Save, X, ToggleLeft, ToggleRight, HelpCircle, Key 
 import { toast } from 'react-hot-toast';
 import { HeuristicRule } from '../types';
 
-import { API_BASE_URL } from '../config';
+import { api, ApiError } from '../api';
 import { getAdminKey, setAdminKey } from '../adminKey';
 
 export default function RulesManager() {
@@ -26,17 +26,6 @@ export default function RulesManager() {
     setAdminKey(val);
   };
 
-  const getHeaders = (extraHeaders: Record<string, string> = {}) => {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...extraHeaders
-    };
-    if (adminKey.trim()) {
-      headers['X-Admin-Api-Key'] = adminKey.trim();
-    }
-    return headers;
-  };
-
   /** A rule with an unparseable regex is skipped silently at scan time, so catch it here. */
   const isInvalidRegex = (phrase: string, useRegex: boolean): boolean => {
     if (!useRegex) return false;
@@ -49,28 +38,21 @@ export default function RulesManager() {
     }
   };
 
-  const handleResponseError = async (response: Response, fallbackMessage: string) => {
-    if (response.status === 401) {
-      toast.error('Unauthorized: Please enter a valid Admin API Key in the settings field below.');
+  /** One place to turn an ApiError into user-facing feedback. */
+  const reportError = (err: unknown, fallback: string) => {
+    console.error(err);
+    if (err instanceof ApiError && err.isAuthProblem) {
+      toast.error('Unauthorized: enter a valid Admin API Key in the field above.');
       return;
     }
-    try {
-      const data = await response.json();
-      toast.error(data.error || fallbackMessage);
-    } catch {
-      toast.error(fallbackMessage);
-    }
+    toast.error(err instanceof Error ? err.message : fallback);
   };
 
   const fetchRules = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/rules`);
-      if (!res.ok) throw new Error('Failed to fetch rules');
-      const data = await res.json();
-      setRules(data);
+      setRules(await api.listRules());
     } catch (err) {
-      console.error(err);
-      toast.error('Failed to load rules');
+      reportError(err, 'Failed to load rules');
     } finally {
       setLoading(false);
     }
@@ -90,29 +72,15 @@ export default function RulesManager() {
 
     setSubmitting(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/rules`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify({
-          phrase: newPhrase.trim(),
-          isRegex: newIsRegex,
-          active: true
-        })
+      const newRule = await api.createRule({
+        phrase: newPhrase.trim(), isRegex: newIsRegex, active: true,
       });
-
-      if (!response.ok) {
-        await handleResponseError(response, 'Failed to create rule');
-        return;
-      }
-      
-      const newRule = await response.json();
       setRules(prev => [...prev, newRule]);
       setNewPhrase('');
       setNewIsRegex(false);
-      toast.success('Rule added successfully');
+      toast.success('Rule added');
     } catch (err) {
-      console.error(err);
-      toast.error('Failed to add rule');
+      reportError(err, 'Failed to add rule');
     } finally {
       setSubmitting(false);
     }
@@ -120,26 +88,13 @@ export default function RulesManager() {
 
   const handleToggleActive = async (rule: HeuristicRule) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/rules/${rule.id}`, {
-        method: 'PUT',
-        headers: getHeaders(),
-        body: JSON.stringify({
-          phrase: rule.phrase,
-          isRegex: rule.isRegex,
-          active: !rule.active
-        })
+      const updatedRule = await api.updateRule(rule.id, {
+        phrase: rule.phrase, isRegex: rule.isRegex, active: !rule.active,
       });
-
-      if (!response.ok) {
-        await handleResponseError(response, 'Failed to update rule status');
-        return;
-      }
-      const updatedRule = await response.json();
       setRules(prev => prev.map(r => r.id === rule.id ? updatedRule : r));
       toast.success(`Rule ${updatedRule.active ? 'enabled' : 'disabled'}`);
     } catch (err) {
-      console.error(err);
-      toast.error('Failed to update rule status');
+      reportError(err, 'Failed to update rule status');
     }
   };
 
@@ -147,20 +102,11 @@ export default function RulesManager() {
     if (!confirm('Are you sure you want to delete this rule?')) return;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/rules/${id}`, {
-        method: 'DELETE',
-        headers: getHeaders()
-      });
-
-      if (!response.ok) {
-        await handleResponseError(response, 'Failed to delete rule');
-        return;
-      }
+      await api.deleteRule(id);
       setRules(prev => prev.filter(r => r.id !== id));
-      toast.success('Rule deleted successfully');
+      toast.success('Rule deleted');
     } catch (err) {
-      console.error(err);
-      toast.error('Failed to delete rule');
+      reportError(err, 'Failed to delete rule');
     }
   };
 
@@ -184,27 +130,14 @@ export default function RulesManager() {
     if (isInvalidRegex(editPhrase.trim(), editIsRegex)) return;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/rules/${ruleId}`, {
-        method: 'PUT',
-        headers: getHeaders(),
-        body: JSON.stringify({
-          phrase: editPhrase.trim(),
-          isRegex: editIsRegex,
-          active: currentActive
-        })
+      const updatedRule = await api.updateRule(ruleId, {
+        phrase: editPhrase.trim(), isRegex: editIsRegex, active: currentActive,
       });
-
-      if (!response.ok) {
-        await handleResponseError(response, 'Failed to save rule updates');
-        return;
-      }
-      const updatedRule = await response.json();
       setRules(prev => prev.map(r => r.id === ruleId ? updatedRule : r));
       cancelEdit();
-      toast.success('Rule updated successfully');
+      toast.success('Rule updated');
     } catch (err) {
-      console.error(err);
-      toast.error('Failed to save rule updates');
+      reportError(err, 'Failed to save rule updates');
     }
   };
 
