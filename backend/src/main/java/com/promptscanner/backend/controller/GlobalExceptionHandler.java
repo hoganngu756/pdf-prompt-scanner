@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.Map;
 
@@ -35,6 +36,21 @@ public class GlobalExceptionHandler {
         log.warn("Upload rejected: file exceeds the configured multipart limit ({})", maxFileSize);
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
                 .body(Map.of("error", "File is too large. The maximum upload size is " + maxFileSize + "."));
+    }
+
+    /**
+     * A request for a path that does not exist is a 404, not a server fault.
+     *
+     * Without this the catch-all below turned every unknown path into a 500 and
+     * wrote a full stack trace at ERROR level, so any unauthenticated crawler
+     * probing for /actuator/env, /.env, /wp-admin and friends could inflate the
+     * logs without limit — and real 500s became impossible to alert on.
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Map<String, String>> handleNotFound(NoResourceFoundException ex) {
+        log.debug("No handler for {}", ex.getResourcePath());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("error", "Not found."));
     }
 
     @ExceptionHandler(Exception.class)

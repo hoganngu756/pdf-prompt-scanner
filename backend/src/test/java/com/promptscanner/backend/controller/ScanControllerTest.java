@@ -135,6 +135,24 @@ class ScanControllerTest {
     }
 
     @Test
+    void unknownPath_Returns404NotServerError() throws Exception {
+        // A catch-all handler once turned every unknown path into a 500 with a
+        // full stack trace, letting any crawler inflate the logs without limit.
+        mockMvc.perform(get("/actuator/env")).andExpect(status().isNotFound());
+        mockMvc.perform(get("/definitely-not-a-route")).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void createRule_WithOverlongPhrase_ReturnsBadRequest() throws Exception {
+        String tooLong = "a".repeat(501);
+        mockMvc.perform(post("/api/rules")
+                        .header("X-Admin-Api-Key", "test-admin-secret-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phrase\": \"" + tooLong + "\", \"isRegex\": false, \"active\": true}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void scanPdf_WithEmptyFile_ReturnsBadRequest() throws Exception {
         MockMultipartFile emptyFile = new MockMultipartFile("file", "empty.pdf", "application/pdf", new byte[0]);
 

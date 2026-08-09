@@ -42,7 +42,10 @@ public class LlmScannerService {
         }
 
         try {
-            String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + geminiApiKey;
+            // The key travels in a header, not the query string. Query strings are
+            // routinely captured by proxies, access logs and error reporters; a
+            // header keeps the credential out of all of them.
+            String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
             // Prevent tag smuggling by escaping document tags in user content
             String sanitizedText = text
@@ -82,6 +85,7 @@ public class LlmScannerService {
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("x-goog-api-key", geminiApiKey);
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
 
             @SuppressWarnings("rawtypes")

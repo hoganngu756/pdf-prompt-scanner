@@ -13,6 +13,9 @@ package com.promptscanner.backend.dto;
  */
 public record HeuristicRuleRequest(String phrase, Boolean isRegex, Boolean active) {
 
+    /** Rules are compiled into a Pattern on every scan, so their size is bounded. */
+    public static final int MAX_PHRASE_LENGTH = 500;
+
     public boolean regexOrDefault() {
         return isRegex != null && isRegex;
     }
@@ -23,5 +26,9 @@ public record HeuristicRuleRequest(String phrase, Boolean isRegex, Boolean activ
 
     public boolean hasPhrase() {
         return phrase != null && !phrase.isBlank();
+    }
+
+    public boolean phraseWithinLimit() {
+        return phrase != null && phrase.trim().length() <= MAX_PHRASE_LENGTH;
     }
 }

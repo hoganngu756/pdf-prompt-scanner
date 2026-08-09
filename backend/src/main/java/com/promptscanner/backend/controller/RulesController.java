@@ -33,7 +33,7 @@ public class RulesController {
         if (!request.hasPhrase()) {
             return ResponseEntity.badRequest().build();
         }
-        validateRegex(request);
+        validateRequest(request);
 
         HeuristicRule rule = new HeuristicRule(
                 request.phrase().trim(), request.regexOrDefault(), request.activeOrDefault());
@@ -46,7 +46,7 @@ public class RulesController {
         if (!request.hasPhrase()) {
             return ResponseEntity.badRequest().build();
         }
-        validateRegex(request);
+        validateRequest(request);
 
         return heuristicRuleRepository.findById(id)
                 .map(rule -> {
@@ -71,6 +71,14 @@ public class RulesController {
      * An unparseable regex is silently skipped at scan time, so a rule saved with one
      * would show as "Active" while never matching anything. Reject it at the door.
      */
+    private void validateRequest(HeuristicRuleRequest request) {
+        if (!request.phraseWithinLimit()) {
+            throw new IllegalArgumentException(
+                    "Rule phrase exceeds the maximum length of " + HeuristicRuleRequest.MAX_PHRASE_LENGTH + " characters.");
+        }
+        validateRegex(request);
+    }
+
     private void validateRegex(HeuristicRuleRequest request) {
         if (request.regexOrDefault()) {
             try {
