@@ -50,6 +50,10 @@ pnpm-debug.log*
 Thumbs.db
 desktop.ini
 
+# ===== CI =====
+# Kept local rather than committed.
+.github/workflows/
+
 # ===== Local scratch =====
 # Ad-hoc PDFs dropped in backend/ while testing. Note this is anchored to
 # backend/ only, so committed fixtures under src/ and frontend/public/samples/
