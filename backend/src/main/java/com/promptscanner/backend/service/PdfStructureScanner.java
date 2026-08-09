@@ -11,6 +11,7 @@ import org.apache.pdfbox.pdmodel.interactive.form.PDAcroForm;
 import org.apache.pdfbox.pdmodel.interactive.form.PDField;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocumentOutline;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineItem;
+import com.promptscanner.backend.util.TextNormalizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -264,8 +265,10 @@ public class PdfStructureScanner {
      * this only controls whether the structure check raises a finding itself.
      */
     private boolean looksInstructional(String value) {
+        // Normalised so a directive spelled with lookalike characters is still seen
+        String candidate = TextNormalizer.normalize(value);
         for (Pattern p : INSTRUCTION_PATTERNS) {
-            if (p.matcher(value).find()) {
+            if (p.matcher(candidate).find()) {
                 return true;
             }
         }

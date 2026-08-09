@@ -3,6 +3,7 @@ package com.promptscanner.backend.service;
 import com.promptscanner.backend.dto.ScanResponse;
 import com.promptscanner.backend.entity.HeuristicRule;
 import com.promptscanner.backend.repository.HeuristicRuleRepository;
+import com.promptscanner.backend.util.TextNormalizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -106,8 +107,9 @@ public class HeuristicScannerService {
             return new ScanResponse.HeuristicResult(true, flags, activeRules.size());
         }
 
-        // Normalize text to remove invisible unicode characters like zero-width spaces
-        String normalizedText = text.replaceAll("[\\p{Cf}]", "");
+        // Fold homoglyphs, compatibility forms, accents and zero-width padding so a
+        // rule written in plain ASCII still matches a disguised spelling.
+        String normalizedText = TextNormalizer.normalize(text);
 
         for (HeuristicRule rule : activeRules) {
             try {
@@ -115,7 +117,11 @@ public class HeuristicScannerService {
 
                 if (pattern.matcher(normalizedText).find()) {
                     String matchType = rule.isRegex() ? "regex pattern" : "phrase";
-                    flags.add("Detected suspicious " + matchType + " matching: '" + rule.getPhrase() + "'");
+                    // If the raw text didn't match, the phrase was actively disguised --
+                    // worth saying so, since that is itself evidence of intent.
+                    boolean neededUnmasking = !pattern.matcher(text).find();
+                    flags.add("Detected suspicious " + matchType + " matching: '" + rule.getPhrase() + "'"
+                            + (neededUnmasking ? " (disguised with lookalike or hidden characters)" : ""));
                 }
             } catch (PatternSyntaxException e) {
                 // Log and skip invalid regex rules to keep scanner resilient

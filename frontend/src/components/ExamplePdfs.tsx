@@ -67,6 +67,13 @@ const SAMPLES: SamplePdf[] = [
     safe: false,
   },
   {
+    filename: 'sample_homoglyph.pdf',
+    label: 'Homoglyph Obfuscation',
+    description: 'A support ticket whose payload swaps Latin letters for identical-looking Cyrillic ones — reads normally to an AI, but defeats any plain-text rule that is not normalised first.',
+    attackType: 'Lookalike characters',
+    safe: false,
+  },
+  {
     filename: 'sample_clean.pdf',
     label: 'Clean Document',
     description: 'A normal team lunch menu with no injections. Use this to see what a safe scan result looks like.',
