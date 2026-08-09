@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Header from './components/Header'
 import UploadSection from './components/UploadSection'
 import ResultsDashboard from './components/ResultsDashboard'
@@ -7,10 +7,11 @@ import RulesManager from './components/RulesManager'
 import WelcomeGuide from './components/WelcomeGuide'
 import ExamplePdfs from './components/ExamplePdfs'
 import { Toaster, toast } from 'react-hot-toast'
-import { ScanResponse, ScanRecord } from './types'
+import { ScanResponse } from './types'
 import './index.css'
 
-import { api, ApiError } from './api'
+import { api } from './api'
+import { loadHistory, recordScan, clearHistory, HistoryEntry } from './scanHistory'
 
 function App() {
   const [file, setFile] = useState<File | null>(null)
@@ -19,33 +20,7 @@ function App() {
   const [results, setResults] = useState<ScanResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('scan')
-  const [history, setHistory] = useState<ScanRecord[]>([])
-
-  const [historyError, setHistoryError] = useState<string | null>(null)
-
-  const fetchHistory = async () => {
-    setHistoryError(null)
-    try {
-      // History exposes other users' filenames and analyses, so it is credentialed
-      setHistory(await api.history())
-    } catch (err) {
-      console.error('Failed to fetch history:', err)
-      if (err instanceof ApiError && err.isAuthProblem) {
-        setHistoryError('Scan history requires an Admin API Key. Enter it in the Rules tab.')
-        setHistory([])
-        return
-      }
-      const message = err instanceof Error ? err.message : 'Failed to fetch scan history.'
-      setHistoryError(message)
-      toast.error(message)
-    }
-  }
-
-  useEffect(() => {
-    if (activeTab === 'history') {
-      fetchHistory()
-    }
-  }, [activeTab])
+  const [history, setHistory] = useState<HistoryEntry[]>(() => loadHistory())
 
   // Mirrors spring.servlet.multipart.max-file-size on the backend. Checking here
   // saves the user a full upload that the server would only reject at the end.
@@ -84,7 +59,10 @@ function App() {
     setResults(null)
 
     try {
-      setResults(await api.scan(targetFile, useLLM, useHeuristics))
+      const scanResults = await api.scan(targetFile, useLLM, useHeuristics)
+      setResults(scanResults)
+      // Recorded in this browser only; the server keeps nothing.
+      setHistory(recordScan(targetFile.name, scanResults))
       toast.success('Scan complete')
     } catch (error) {
       console.error('Error during scan:', error)
@@ -165,7 +143,7 @@ function App() {
       )}
 
       {activeTab === 'history' && (
-        <HistoryTable history={history} error={historyError} />
+        <HistoryTable history={history} onClear={() => setHistory(clearHistory())} />
       )}
 
       {activeTab === 'rules' && (

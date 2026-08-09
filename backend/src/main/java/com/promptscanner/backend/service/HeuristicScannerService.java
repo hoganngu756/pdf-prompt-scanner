@@ -1,8 +1,7 @@
 package com.promptscanner.backend.service;
 
+import com.promptscanner.backend.config.HeuristicRuleProperties;
 import com.promptscanner.backend.dto.ScanResponse;
-import com.promptscanner.backend.entity.HeuristicRule;
-import com.promptscanner.backend.repository.HeuristicRuleRepository;
 import com.promptscanner.backend.util.TextNormalizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,33 +19,23 @@ public class HeuristicScannerService {
 
     private static final Logger log = LoggerFactory.getLogger(HeuristicScannerService.class);
 
-    private final HeuristicRuleRepository heuristicRuleRepository;
+    private final HeuristicRuleProperties ruleProperties;
 
     /**
-     * Compiling every rule on every scan is pure repeated work, since rule text
-     * changes rarely. Keyed by phrase + mode so an edited rule compiles afresh.
+     * Compiling every rule on every scan is pure repeated work. The rule set is
+     * now fixed at boot, so this cache is filled once and never invalidated.
      */
     private final Map<String, Pattern> patternCache = new ConcurrentHashMap<>();
 
-    public HeuristicScannerService(HeuristicRuleRepository heuristicRuleRepository) {
-        this.heuristicRuleRepository = heuristicRuleRepository;
+    public HeuristicScannerService(HeuristicRuleProperties ruleProperties) {
+        this.ruleProperties = ruleProperties;
     }
 
-    private Pattern patternFor(HeuristicRule rule) {
+    private Pattern patternFor(HeuristicRuleProperties.Rule rule) {
         String key = (rule.isRegex() ? "re:" : "lit:") + rule.getPhrase();
-        Pattern cached = patternCache.get(key);
-        if (cached != null) {
-            return cached;
-        }
-        Pattern compiled = rule.isRegex()
+        return patternCache.computeIfAbsent(key, k -> rule.isRegex()
                 ? Pattern.compile(rule.getPhrase(), Pattern.CASE_INSENSITIVE)
-                : buildObfuscationTolerantPattern(rule.getPhrase());
-        // Bound the cache so a churn of distinct rules can't grow it without limit
-        if (patternCache.size() > 1000) {
-            patternCache.clear();
-        }
-        patternCache.put(key, compiled);
-        return compiled;
+                : buildObfuscationTolerantPattern(rule.getPhrase()));
     }
 
     /**
@@ -92,26 +81,26 @@ public class HeuristicScannerService {
 
     public ScanResponse.HeuristicResult scan(String text) {
         List<String> flags = new ArrayList<>();
-        List<HeuristicRule> activeRules = heuristicRuleRepository.findByIsActiveTrue();
+        List<HeuristicRuleProperties.Rule> rules = ruleProperties.getRules();
 
-        if (activeRules.isEmpty()) {
+        if (rules.isEmpty()) {
             // No rules means the engine checked nothing. Reporting "safe" here would
             // render a green badge for a scanner that is effectively switched off.
-            log.warn("Heuristic scan requested but no active rules are configured; reporting as not safe.");
-            flags.add("Heuristic engine has no active rules configured — this document was not checked. "
-                    + "Add rules in the Rules tab or restart with an empty database to restore the defaults.");
+            log.warn("Heuristic scan requested but no rules are configured; reporting as not safe.");
+            flags.add("Heuristic engine has no rules configured — this document was not checked. "
+                    + "Add rules to heuristic-rules.yml and restart.");
             return new ScanResponse.HeuristicResult(false, flags, 0);
         }
 
         if (text == null || text.trim().isEmpty()) {
-            return new ScanResponse.HeuristicResult(true, flags, activeRules.size());
+            return new ScanResponse.HeuristicResult(true, flags, rules.size());
         }
 
         // Fold homoglyphs, compatibility forms, accents and zero-width padding so a
         // rule written in plain ASCII still matches a disguised spelling.
         String normalizedText = TextNormalizer.normalize(text);
 
-        for (HeuristicRule rule : activeRules) {
+        for (HeuristicRuleProperties.Rule rule : rules) {
             try {
                 Pattern pattern = patternFor(rule);
 
@@ -124,12 +113,20 @@ public class HeuristicScannerService {
                             + (neededUnmasking ? " (disguised with lookalike or hidden characters)" : ""));
                 }
             } catch (PatternSyntaxException e) {
-                // Log and skip invalid regex rules to keep scanner resilient
+                // A bad regex is now a config error caught at boot, but stay resilient
                 log.warn("Skipped invalid regex rule '{}': {}", rule.getPhrase(), e.getMessage());
             }
         }
 
         boolean isSafe = flags.isEmpty();
-        return new ScanResponse.HeuristicResult(isSafe, flags, activeRules.size());
+        return new ScanResponse.HeuristicResult(isSafe, flags, rules.size());
+    }
+
+    /** Literal phrases, for deriving preview highlight words. */
+    public List<String> literalPhrases() {
+        return ruleProperties.getRules().stream()
+                .filter(r -> !r.isRegex())
+                .map(HeuristicRuleProperties.Rule::getPhrase)
+                .toList();
     }
 }

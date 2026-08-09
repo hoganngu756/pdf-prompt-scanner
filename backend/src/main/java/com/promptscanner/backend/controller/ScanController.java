@@ -1,33 +1,19 @@
 package com.promptscanner.backend.controller;
 
-import com.promptscanner.backend.dto.ScanRecordResponse;
 import com.promptscanner.backend.dto.ScanResponse;
-import com.promptscanner.backend.repository.ScanRecordRepository;
 import com.promptscanner.backend.service.ScanOrchestrationService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api")
 public class ScanController {
 
     private final ScanOrchestrationService scanOrchestrationService;
-    private final ScanRecordRepository scanRecordRepository;
 
-    public ScanController(ScanOrchestrationService scanOrchestrationService, 
-                          ScanRecordRepository scanRecordRepository) {
+    public ScanController(ScanOrchestrationService scanOrchestrationService) {
         this.scanOrchestrationService = scanOrchestrationService;
-        this.scanRecordRepository = scanRecordRepository;
-    }
-
-    @GetMapping("/history")
-    public ResponseEntity<List<ScanRecordResponse>> getHistory() {
-        return ResponseEntity.ok(scanRecordRepository.findAllByOrderByScanDateDesc().stream()
-                .map(ScanRecordResponse::from)
-                .toList());
     }
 
     @PostMapping("/scan")
@@ -46,15 +32,14 @@ public class ScanController {
         // Security: Validate file type
         String contentType = file.getContentType();
         String originalName = file.getOriginalFilename();
-        if (contentType == null || !contentType.equals("application/pdf") || 
+        if (contentType == null || !contentType.equals("application/pdf") ||
             originalName == null || !originalName.toLowerCase().endsWith(".pdf")) {
             response.setError("Invalid file type. Only PDF files are accepted.");
             return ResponseEntity.badRequest().body(response);
         }
 
         try {
-            ScanResponse scanResponse = scanOrchestrationService.orchestrateScan(file, useLLM, useHeuristics);
-            return ResponseEntity.ok(scanResponse);
+            return ResponseEntity.ok(scanOrchestrationService.orchestrateScan(file, useLLM, useHeuristics));
         } catch (IllegalArgumentException e) {
             response.setError(e.getMessage());
             return ResponseEntity.badRequest().body(response);

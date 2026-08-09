@@ -1,37 +1,34 @@
-import { KeyRound } from 'lucide-react';
-import { ScanRecord } from '../types';
+import { Trash2 } from 'lucide-react';
+import { HistoryEntry } from '../scanHistory';
 
 interface HistoryTableProps {
-  history: ScanRecord[];
-  error?: string | null;
+  history: HistoryEntry[];
+  onClear: () => void;
 }
 
-export default function HistoryTable({ history, error }: HistoryTableProps) {
+export default function HistoryTable({ history, onClear }: HistoryTableProps) {
   return (
     <>
       <div className="page-header">
         <h2>Scan history</h2>
-        <p>Every document scanned by this instance, with the findings recorded at the time.</p>
+        <p>
+          Documents you have scanned in this browser. Nothing is sent anywhere or shared —
+          the server keeps no record of any scan.
+        </p>
       </div>
 
-      {error ? (
-        <div className="notice is-warn">
-          <KeyRound size={16} />
-          <div>
-            <strong>Admin key required</strong>
-            {error}
-          </div>
-        </div>
-      ) : history.length === 0 ? (
+      {history.length === 0 ? (
         <div className="empty-state">
-          <strong>No scans recorded</strong>
-          <span>Results appear here once a document has been scanned.</span>
+          <strong>No scans yet</strong>
+          <span>Results appear here once you have scanned a document.</span>
         </div>
       ) : (
         <>
           <div className="section-head">
-            <span className="eyebrow">Records</span>
-            <span className="eyebrow tabular">{history.length}</span>
+            <span className="eyebrow">This browser</span>
+            <button className="btn-secondary" onClick={onClear}>
+              <Trash2 size={13} /> Clear history
+            </button>
           </div>
           <div className="table-wrap">
             <table>
@@ -44,34 +41,22 @@ export default function HistoryTable({ history, error }: HistoryTableProps) {
                 </tr>
               </thead>
               <tbody>
-                {history.map((record) => {
-                  const details = [
-                    record.visualFlags && `visual: ${record.visualFlags}`,
-                    record.structureFlags && `structure: ${record.structureFlags}`,
-                    record.heuristicFlags && `heuristic: ${record.heuristicFlags}`,
-                    record.llmExplanation && `ai: ${record.llmExplanation}`,
-                  ].filter(Boolean) as string[];
-
-                  return (
-                    <tr key={record.id}>
-                      <td className="cell-nowrap">
-                        {new Date(record.scanDate).toLocaleString(undefined, {
-                          year: 'numeric', month: 'short', day: '2-digit',
-                          hour: '2-digit', minute: '2-digit',
-                        })}
-                      </td>
-                      <td className="cell-filename">{record.fileName}</td>
-                      <td>
-                        <span className={`status ${record.safe ? 'is-safe' : 'is-danger'}`}>
-                          {record.safe ? 'Clean' : 'Flagged'}
-                        </span>
-                      </td>
-                      <td className="cell-details">
-                        {details.length > 0 ? details.join('\n') : '—'}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {history.map((entry) => (
+                  <tr key={entry.id}>
+                    <td className="cell-nowrap">
+                      {new Date(entry.scannedAt).toLocaleString(undefined, {
+                        month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit',
+                      })}
+                    </td>
+                    <td className="cell-filename">{entry.fileName}</td>
+                    <td>
+                      <span className={`status is-${entry.state}`}>{entry.headline}</span>
+                    </td>
+                    <td className="cell-details">
+                      {entry.findings.length > 0 ? entry.findings.join('\n') : '—'}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

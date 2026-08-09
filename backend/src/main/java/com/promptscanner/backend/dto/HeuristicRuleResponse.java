@@ -1,14 +1,11 @@
 package com.promptscanner.backend.dto;
 
-import com.promptscanner.backend.entity.HeuristicRule;
+import com.promptscanner.backend.config.HeuristicRuleProperties;
 
-/**
- * Outbound shape for a rule. Field names match the previous entity-serialised
- * payload exactly, so this is not a breaking change for existing clients.
- */
-public record HeuristicRuleResponse(Long id, String phrase, boolean isRegex, boolean active) {
+/** Outbound shape for a configured rule. */
+public record HeuristicRuleResponse(String phrase, boolean isRegex) {
 
-    public static HeuristicRuleResponse from(HeuristicRule rule) {
-        return new HeuristicRuleResponse(rule.getId(), rule.getPhrase(), rule.isRegex(), rule.isActive());
+    public static HeuristicRuleResponse from(HeuristicRuleProperties.Rule rule) {
+        return new HeuristicRuleResponse(rule.getPhrase(), rule.isRegex());
     }
 }

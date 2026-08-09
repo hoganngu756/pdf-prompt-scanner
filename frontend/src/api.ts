@@ -1,17 +1,14 @@
 import { API_BASE_URL } from './config';
-import { withAdminKey } from './adminKey';
-import { HeuristicRule, ScanRecord, ScanResponse } from './types';
+import { HeuristicRule, ScanResponse } from './types';
 
 /**
  * The single place the frontend talks to the backend.
  *
- * Call sites previously each did their own fetch, header assembly, JSON parsing
- * and error handling — two different implementations had drifted apart, and the
- * admin key was attached by hand per request. Centralising it means an endpoint
- * gains auth, error shape and content-type handling by construction.
+ * The API is now entirely public and read-only apart from submitting a scan, so
+ * there are no credentials to attach and no auth failures to branch on.
  */
 
-/** An error carrying the HTTP status so callers can branch on 401/503 without re-parsing. */
+/** An error carrying the HTTP status so callers can report it precisely. */
 export class ApiError extends Error {
   readonly status: number;
 
@@ -19,11 +16,6 @@ export class ApiError extends Error {
     super(message);
     this.name = 'ApiError';
     this.status = status;
-  }
-
-  /** The server has no admin key configured, or the one supplied was wrong. */
-  get isAuthProblem(): boolean {
-    return this.status === 401 || this.status === 503;
   }
 }
 
@@ -65,15 +57,7 @@ async function request<T>(path: string, init: RequestInit, fallback: string): Pr
   if (!response.ok) {
     throw await errorFrom(response, fallback);
   }
-  return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
-}
-
-const jsonHeaders = () => withAdminKey({ 'Content-Type': 'application/json' });
-
-export interface RulePayload {
-  phrase: string;
-  isRegex: boolean;
-  active: boolean;
+  return (await response.json()) as T;
 }
 
 export const api = {
@@ -86,37 +70,7 @@ export const api = {
     return request<ScanResponse>('/scan', { method: 'POST', body: form }, 'Failed to scan document');
   },
 
-  history(): Promise<ScanRecord[]> {
-    return request<ScanRecord[]>('/history', { headers: withAdminKey() }, 'Failed to fetch scan history');
-  },
-
   listRules(): Promise<HeuristicRule[]> {
     return request<HeuristicRule[]>('/rules', {}, 'Failed to load rules');
-  },
-
-  createRule(payload: RulePayload): Promise<HeuristicRule> {
-    return request<HeuristicRule>(
-      '/rules',
-      { method: 'POST', headers: jsonHeaders(), body: JSON.stringify(payload) },
-      'Failed to create rule',
-    );
-  },
-
-  updateRule(id: number, payload: RulePayload): Promise<HeuristicRule> {
-    return request<HeuristicRule>(
-      `/rules/${id}`,
-      { method: 'PUT', headers: jsonHeaders(), body: JSON.stringify(payload) },
-      'Failed to update rule',
-    );
-  },
-
-  async deleteRule(id: number): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/rules/${id}`, {
-      method: 'DELETE',
-      headers: withAdminKey(),
-    });
-    if (!response.ok) {
-      throw await errorFrom(response, 'Failed to delete rule');
-    }
   },
 };

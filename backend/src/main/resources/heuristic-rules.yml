@@ -1,0 +1,27 @@
+# Detection rules for the heuristic engine.
+#
+# These live in version control rather than a database so that a change to what
+# the scanner looks for is reviewable in a diff, like any other code change.
+# Edit this file and restart; there is no runtime rule editor.
+#
+#   phrase  the text to look for
+#   regex   true to treat it as a regular expression; omit for a literal phrase
+#
+# Literal phrases are matched tolerantly: they ignore spacing, punctuation and
+# zero-width padding ("b.y.p.a.s.s"), fold lookalike characters (Cyrillic "і" to
+# Latin "i"), and anchor at word starts so "act as a" does not fire inside
+# "react as a whole".
+
+app:
+  heuristics:
+    rules:
+      - phrase: "ignore all previous instructions"
+      - phrase: "system message"
+      - phrase: "you are now"
+      - phrase: "system prompt"
+      - phrase: "do not follow the rules"
+      - phrase: "forget everything"
+      - phrase: "bypass all restrictions"
+      - phrase: "new instructions"
+      - phrase: "developer mode"
+      - phrase: "jailbreak"

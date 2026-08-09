@@ -1,19 +1,6 @@
 export interface HeuristicRule {
-  id: number;
   phrase: string;
   isRegex: boolean;
-  active: boolean;
-}
-
-export interface ScanRecord {
-  id: number;
-  fileName: string;
-  scanDate: string;
-  safe: boolean;
-  heuristicFlags?: string;
-  llmExplanation?: string;
-  visualFlags?: string;
-  structureFlags?: string;
 }
 
 export interface HeuristicResult {

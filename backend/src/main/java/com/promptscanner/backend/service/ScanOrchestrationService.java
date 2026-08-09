@@ -1,8 +1,6 @@
 package com.promptscanner.backend.service;
 
 import com.promptscanner.backend.dto.ScanResponse;
-import com.promptscanner.backend.entity.HeuristicRule;
-import com.promptscanner.backend.repository.HeuristicRuleRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -14,9 +12,9 @@ import java.util.List;
 /**
  * Runs the enabled checks over one document and assembles the response.
  *
- * This is the only place that knows about both rules and PDFs: it reads the
- * active rule set and hands the derived highlight words down to extraction, so
- * the lower-level services stay free of persistence concerns.
+ * Nothing is persisted: scan results are returned to the caller and forgotten.
+ * The browser keeps its own local history, so no record of anyone's document
+ * ever touches the server.
  */
 @Service
 public class ScanOrchestrationService {
@@ -26,19 +24,13 @@ public class ScanOrchestrationService {
     private final PdfScannerService pdfScannerService;
     private final HeuristicScannerService heuristicScannerService;
     private final LlmScannerService llmScannerService;
-    private final HeuristicRuleRepository heuristicRuleRepository;
-    private final ScanHistoryService scanHistoryService;
 
     public ScanOrchestrationService(PdfScannerService pdfScannerService,
                                     HeuristicScannerService heuristicScannerService,
-                                    LlmScannerService llmScannerService,
-                                    HeuristicRuleRepository heuristicRuleRepository,
-                                    ScanHistoryService scanHistoryService) {
+                                    LlmScannerService llmScannerService) {
         this.pdfScannerService = pdfScannerService;
         this.heuristicScannerService = heuristicScannerService;
         this.llmScannerService = llmScannerService;
-        this.heuristicRuleRepository = heuristicRuleRepository;
-        this.scanHistoryService = scanHistoryService;
     }
 
     public ScanResponse orchestrateScan(MultipartFile file, boolean useLLM, boolean useHeuristics)
@@ -47,13 +39,8 @@ public class ScanOrchestrationService {
         String fileName = file.getOriginalFilename();
         log.info("Orchestrating scan for file: {} | Size: {} bytes", fileName, file.getSize());
 
-        List<String> literalPhrases = heuristicRuleRepository.findByIsActiveTrue().stream()
-                .filter(rule -> !rule.isRegex())
-                .map(HeuristicRule::getPhrase)
-                .toList();
-
-        PdfScannerService.PdfData pdfData =
-                pdfScannerService.processPdf(file, PdfScannerService.highlightWordsFrom(literalPhrases));
+        PdfScannerService.PdfData pdfData = pdfScannerService.processPdf(
+                file, PdfScannerService.highlightWordsFrom(heuristicScannerService.literalPhrases()));
 
         String extractedText = pdfData.extractedText();
         response.setPreviewImagesBase64(pdfData.previewImagesBase64());
@@ -93,7 +80,7 @@ public class ScanOrchestrationService {
             }
         }
 
-        scanHistoryService.record(fileName, isOverallSafe, response);
+        log.info("Scan complete for {} | overall safe: {}", fileName, isOverallSafe);
         return response;
     }
 }

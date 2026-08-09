@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.Map;
@@ -51,6 +52,18 @@ public class GlobalExceptionHandler {
         log.debug("No handler for {}", ex.getResourcePath());
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(Map.of("error", "Not found."));
+    }
+
+    /**
+     * Same class of problem as the 404 above: the catch-all was turning "wrong
+     * HTTP method" into a 500 with a stack trace, so a client calling POST on a
+     * read-only endpoint got a misleading server error instead of 405.
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<Map<String, String>> handleMethodNotAllowed(HttpRequestMethodNotSupportedException ex) {
+        log.debug("Method {} not supported on this endpoint", ex.getMethod());
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .body(Map.of("error", "This endpoint is read-only."));
     }
 
     @ExceptionHandler(Exception.class)

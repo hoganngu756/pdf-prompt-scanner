@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { api, ApiError } from './api';
 
 const jsonResponse = (body: unknown, status = 200) =>
@@ -8,11 +8,6 @@ const jsonResponse = (body: unknown, status = 200) =>
   });
 
 describe('api client', () => {
-  beforeEach(() => {
-    localStorage.clear();
-    vi.restoreAllMocks();
-  });
-
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -27,20 +22,11 @@ describe('api client', () => {
     );
   });
 
-  it('classifies 401 and 503 as auth problems so callers can prompt for a key', async () => {
-    for (const status of [401, 503]) {
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ error: 'nope' }, status)));
-      const err = await api.history().catch((e) => e);
-      expect(err).toBeInstanceOf(ApiError);
-      expect(err.status).toBe(status);
-      expect(err.isAuthProblem).toBe(true);
-    }
-  });
-
-  it('does not treat other failures as auth problems', async () => {
+  it('preserves the HTTP status on the error', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ error: 'boom' }, 500)));
-    const err = await api.history().catch((e) => e);
-    expect(err.isAuthProblem).toBe(false);
+    const err = await api.listRules().catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(500);
   });
 
   it('falls back to a readable message when the body is not JSON', async () => {
@@ -50,34 +36,31 @@ describe('api client', () => {
         headers: { 'content-type': 'text/html' },
       }),
     ));
-    const err = await api.listRules().catch((e) => e);
-    expect(err.message).toContain('502 Bad Gateway');
+    const err = await api.listRules().catch((e: unknown) => e);
+    expect((err as ApiError).message).toContain('502 Bad Gateway');
   });
 
   it('reports an unreachable backend distinctly from an HTTP error', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
-    const err = await api.listRules().catch((e) => e);
+    const err = await api.listRules().catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
-    expect(err.status).toBe(0);
-    expect(err.message).toContain('Could not reach');
+    expect((err as ApiError).status).toBe(0);
+    expect((err as ApiError).message).toContain('Could not reach');
   });
 
-  it('attaches the admin key when one is stored, and omits it when not', async () => {
-    // A Response body can only be read once, so each call needs a fresh one
+  it('never attaches credentials — the API is public and read-only', async () => {
     const spy = vi.fn().mockImplementation(async () => jsonResponse([]));
     vi.stubGlobal('fetch', spy);
 
-    await api.history();
-    expect((spy.mock.calls[0][1] as RequestInit).headers).not.toHaveProperty('X-Admin-Api-Key');
+    await api.listRules();
 
-    localStorage.setItem('pdf_promptscanner_admin_key', 'secret-value');
-    await api.history();
-    expect((spy.mock.calls[1][1] as RequestInit).headers)
-      .toHaveProperty('X-Admin-Api-Key', 'secret-value');
+    const init = spy.mock.calls[0][1] as RequestInit;
+    const headers = (init?.headers ?? {}) as Record<string, string>;
+    expect(Object.keys(headers)).not.toContain('X-Admin-Api-Key');
   });
 
   it('sends scan uploads as multipart without forcing a Content-Type', async () => {
-    const spy = vi.fn().mockResolvedValue(jsonResponse({}));
+    const spy = vi.fn().mockImplementation(async () => jsonResponse({}));
     vi.stubGlobal('fetch', spy);
 
     const file = new File(['%PDF-1.4'], 'doc.pdf', { type: 'application/pdf' });

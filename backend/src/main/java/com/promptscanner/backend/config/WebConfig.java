@@ -1,6 +1,5 @@
 package com.promptscanner.backend.config;
 
-import com.promptscanner.backend.interceptor.AdminApiKeyInterceptor;
 import com.promptscanner.backend.interceptor.IpRateLimitingInterceptor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
@@ -14,12 +13,9 @@ public class WebConfig implements WebMvcConfigurer {
     @Value("${app.cors.allowed-origins}")
     private String allowedOrigins;
 
-    private final AdminApiKeyInterceptor adminApiKeyInterceptor;
     private final IpRateLimitingInterceptor ipRateLimitingInterceptor;
 
-    public WebConfig(AdminApiKeyInterceptor adminApiKeyInterceptor,
-                     IpRateLimitingInterceptor ipRateLimitingInterceptor) {
-        this.adminApiKeyInterceptor = adminApiKeyInterceptor;
+    public WebConfig(IpRateLimitingInterceptor ipRateLimitingInterceptor) {
         this.ipRateLimitingInterceptor = ipRateLimitingInterceptor;
     }
 
@@ -37,9 +33,6 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(adminApiKeyInterceptor)
-                .addPathPatterns("/api/rules", "/api/rules/**", "/api/history");
-
         // Every endpoint is rate limited, not just scanning, so rule and history
         // traffic can't be used to hammer the instance for free.
         registry.addInterceptor(ipRateLimitingInterceptor)
