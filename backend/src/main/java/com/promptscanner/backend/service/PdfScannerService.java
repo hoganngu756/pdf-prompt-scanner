@@ -119,7 +119,25 @@ public class PdfScannerService {
         }
     }
 
+    /**
+     * OCR is best-effort. When the native Tesseract library is missing or fails
+     * to initialise, tess4j throws {@link ExceptionInInitializerError} — an Error,
+     * not an Exception — which sailed past the per-image catch below and failed
+     * the entire scan with a 500. A document containing any image was
+     * unscannable on a host without libtesseract. The text, structure and visual
+     * layers do not depend on OCR, so a failure here degrades the scan rather
+     * than ending it.
+     */
     private String runOcr(PDDocument document) {
+        try {
+            return runOcrInternal(document);
+        } catch (Throwable t) {
+            log.warn("OCR unavailable, continuing without it: {}", t.toString());
+            return "";
+        }
+    }
+
+    private String runOcrInternal(PDDocument document) {
         StringBuilder ocrText = new StringBuilder();
         Tesseract tesseract = tesseractThreadLocal.get();
         int imageCount = 0;
@@ -145,7 +163,8 @@ public class PdfScannerService {
                     BufferedImage bim = image.getImage();
                     ocrText.append(tesseract.doOCR(bim)).append("\n");
                 } catch (Exception e) {
-                    log.warn("OCR Error on image {}: {}", name.getName(), e.getMessage());
+                    // One unreadable image should not abandon the remaining ones
+                    log.warn("OCR error on image {}: {}", name.getName(), e.getMessage());
                 }
             }
         }

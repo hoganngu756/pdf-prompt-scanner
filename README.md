@@ -55,6 +55,17 @@ export TRUSTED_PROXY_COUNT=0         # no proxy in front when running locally
 ```
 Runs at `http://localhost:8080`. There is no database to set up and no credential to configure. Scanning works without a Gemini key — untick **AI context analysis** if you don't have one.
 
+**OCR of embedded images** needs the native Tesseract library. On macOS install it with
+`brew install tesseract`, then start the server with the library on JNA's search path:
+
+```bash
+java -Djna.library.path=/opt/homebrew/lib -jar target/backend-0.0.1-SNAPSHOT.jar
+```
+
+Without it the scan still runs — the text, structure and visual layers are unaffected —
+but payloads that exist only inside images will not be recovered. The Docker image used
+for deployment installs `tesseract-ocr` directly, so no flag is needed there.
+
 ### 3. Frontend
 ```bash
 cd frontend

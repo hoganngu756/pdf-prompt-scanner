@@ -11,17 +11,77 @@
 # zero-width padding ("b.y.p.a.s.s"), fold lookalike characters (Cyrillic "і" to
 # Latin "i"), and anchor at word starts so "act as a" does not fire inside
 # "react as a whole".
+#
+# Rules are grouped by the injection family they target. Phrases are kept
+# multi-word wherever possible: single common words ("bypass", "instructions")
+# fire on ordinary business prose and were measured to dominate false positives.
 
 app:
   heuristics:
     rules:
+      # --- Instruction override: reset the model's task ---
       - phrase: "ignore all previous instructions"
-      - phrase: "system message"
-      - phrase: "you are now"
-      - phrase: "system prompt"
-      - phrase: "do not follow the rules"
+      - phrase: "ignore previous instructions"
+      - phrase: "ignore the above"
+      - phrase: "disregard all previous"
+      - phrase: "disregard the above"
       - phrase: "forget everything"
-      - phrase: "bypass all restrictions"
+      - phrase: "forget all previous"
       - phrase: "new instructions"
+      - phrase: "do not follow the rules"
+
+      # --- Role hijack: assign a new persona to escape guardrails ---
+      - phrase: "you are now"
+      - phrase: "from now on you"
+      - phrase: "pretend you are"
+      - phrase: "act as an unrestricted"
       - phrase: "developer mode"
       - phrase: "jailbreak"
+      - phrase: "dan mode"
+
+      # --- System prompt extraction ---
+      # Bare "system prompt" / "system message" fire on ordinary technical
+      # writing — incident postmortems, product manuals, research abstracts —
+      # and were measured to cause 22 of 22 false positives on the benign
+      # corpus. Requiring an extraction verb nearby keeps the intent and drops
+      # the noise.
+      - phrase: "(reveal|print|repeat|show|output|leak|disclose|ignore)\\b.{0,24}\\bsystem (prompt|message)"
+        regex: true
+      - phrase: "reveal your instructions"
+      - phrase: "repeat the text above"
+      - phrase: "print your instructions"
+
+      # --- Output forcing: dictate the verdict regardless of content ---
+      - phrase: "respond only with"
+      # "output only" appears in legitimate prose ("output only structured
+      # logs"); as a directive it is followed by a quoted or shouted literal.
+      #
+      # NOTE: regex rules are compiled CASE_INSENSITIVE, so [A-Z] matches
+      # lowercase too. A rule that means to discriminate on case must opt out
+      # explicitly with (?-i:...) -- without it this matched "output only
+      # structured logs" and caused 7 false positives.
+      - phrase: "output only\\s+[\"'\u201c]|output only\\s+(?-i:[A-Z]{2,})"
+        regex: true
+      - phrase: "you must output"
+      - phrase: "always respond with"
+      - phrase: "regardless of the content"
+      - phrase: "regardless of what"
+
+      # --- Safety bypass ---
+      - phrase: "bypass all restrictions"
+      - phrase: "bypass your safety"
+      - phrase: "ignore safety"
+      - phrase: "without any warnings"
+
+      # --- Data exfiltration ---
+      - phrase: "send the data to"
+      - phrase: "append to the url"
+      - phrase: "include the api key"
+      - phrase: "exfiltrate"
+
+      # --- Encoded payload markers ---
+      # A long unbroken base64 run is not proof of anything on its own, but in a
+      # text document it is unusual enough to be worth surfacing.
+      - phrase: "decode the following"
+      - phrase: "base64:[A-Za-z0-9+/]{40,}={0,2}"
+        regex: true
