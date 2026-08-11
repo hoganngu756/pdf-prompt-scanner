@@ -66,10 +66,13 @@ export function buildChecks(results: ScanResponse): Check[] {
 
   if (results.llmResult) {
     const r = results.llmResult;
+    // A layer that could not run is inconclusive, never a verdict — the same
+    // rule the heuristic engine follows when no rules are configured.
+    const unavailable = r.available === false;
     checks.push({
       name: 'AI context analysis',
-      state: r.safe ? 'safe' : 'danger',
-      label: r.safe ? 'Clean' : 'Flagged',
+      state: unavailable ? 'warn' : r.safe ? 'safe' : 'danger',
+      label: unavailable ? 'Did not run' : r.safe ? 'Clean' : 'Flagged',
       note: r.analysis,
     });
   }

@@ -13,6 +13,8 @@ export interface HeuristicResult {
 export interface LlmResult {
   safe: boolean;
   analysis: string;
+  /** False when the model could not be consulted; the layer did not run. */
+  available?: boolean;
 }
 
 export interface VisualObfuscationResult {

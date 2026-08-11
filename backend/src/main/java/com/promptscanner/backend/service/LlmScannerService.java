@@ -38,7 +38,8 @@ public class LlmScannerService {
         }
 
         if (geminiApiKey == null || geminiApiKey.isEmpty() || geminiApiKey.equals("YOUR_API_KEY_HERE")) {
-            return new ScanResponse.LlmResult(false, "ERROR: Gemini API Key is missing. Please set it in application.properties.");
+            return ScanResponse.LlmResult.unavailable(
+                    "AI analysis is not configured: no Gemini API key is set on the server.");
         }
 
         try {
@@ -114,14 +115,17 @@ public class LlmScannerService {
                 }
             }
             
-            return new ScanResponse.LlmResult(false, "Failed to parse LLM response format.");
+            return ScanResponse.LlmResult.unavailable("The AI service returned a response that could not be read.");
 
         } catch (Exception e) {
             // The upstream message can carry hostnames and Google's raw error body,
             // so it is logged server-side but never relayed to the browser.
             log.error("LLM API Error during scan: {}", e.getMessage(), e);
-            return new ScanResponse.LlmResult(false,
-                    "The AI analysis service could not be reached. Heuristic and visual checks above are unaffected.");
+            // Reporting this as "unsafe" made every document a detection whenever
+            // Gemini was rate limited or down -- measured as a 100% false positive
+            // rate during a burst. An unreachable check is inconclusive, not a hit.
+            return ScanResponse.LlmResult.unavailable(
+                    "The AI analysis service could not be reached, so this layer did not run.");
         }
     }
 }

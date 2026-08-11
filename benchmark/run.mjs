@@ -13,7 +13,10 @@ import { readdirSync, readFileSync } from 'fs';
 
 const BASE = process.env.SCAN_URL ?? 'http://localhost:8080/api';
 const USE_LLM = process.argv.includes('--llm');
-const CONCURRENCY = 4;
+// Gemini's free tier rate-limits aggressively; bursting produced 143 x 429 and
+// corrupted a whole run. Serialise and pace when the LLM layer is enabled.
+const CONCURRENCY = process.argv.includes('--llm') ? 1 : 4;
+const DELAY_MS = process.argv.includes('--llm') ? 4500 : 0;
 
 async function scan(path) {
   const form = new FormData();
@@ -32,7 +35,8 @@ function flaggedBy(result) {
   if (result.visualObfuscationResult && !result.visualObfuscationResult.safe) layers.push('visual');
   if (result.documentStructureResult && !result.documentStructureResult.safe) layers.push('structure');
   if (result.heuristicResult && !result.heuristicResult.safe) layers.push('heuristic');
-  if (result.llmResult && !result.llmResult.safe) layers.push('llm');
+  // available === false means the layer did not run; it is not a detection
+  if (result.llmResult && result.llmResult.available !== false && !result.llmResult.safe) layers.push('llm');
   return layers;
 }
 
@@ -43,7 +47,8 @@ async function runAll(dir, files) {
     const results = await Promise.all(
       batch.map(async (f) => {
         try {
-          return { file: f, layers: flaggedBy(await scan(`${dir}/${f}`)) };
+          const r = await scan(`${dir}/${f}`);
+          return { file: f, layers: flaggedBy(r), llmDown: r.llmResult?.available === false };
         } catch (e) {
           return { file: f, layers: [], error: String(e.message) };
         }
@@ -51,6 +56,7 @@ async function runAll(dir, files) {
     );
     out.push(...results);
     process.stdout.write(`\r  scanned ${out.length}/${files.length}`);
+    if (DELAY_MS) await new Promise((r) => setTimeout(r, DELAY_MS));
   }
   process.stdout.write('\r');
   return out;
@@ -59,15 +65,18 @@ async function runAll(dir, files) {
 const pct = (n, d) => (d === 0 ? 0 : (100 * n) / d);
 
 async function main() {
-  const malFiles = readdirSync('corpus/malicious').filter((f) => f.endsWith('.pdf'));
-  const bngFiles = readdirSync('corpus/benign').filter((f) => f.endsWith('.pdf'));
+  const ROOT = process.env.CORPUS ?? 'corpus';
+  const malFiles = readdirSync(`${ROOT}/malicious`).filter((f) => f.endsWith('.pdf'));
+  const bngFiles = readdirSync(`${ROOT}/benign`).filter((f) => f.endsWith('.pdf'));
 
   console.log(`\nCorpus: ${malFiles.length} malicious, ${bngFiles.length} benign`);
   console.log(`Layers: visual + structure + heuristics${USE_LLM ? ' + Gemini' : ' (no LLM)'}\n`);
 
-  const mal = await runAll('corpus/malicious', malFiles);
-  const bng = await runAll('corpus/benign', bngFiles);
+  const mal = await runAll(`${ROOT}/malicious`, malFiles);
+  const bng = await runAll(`${ROOT}/benign`, bngFiles);
 
+  const unavailable = [...mal, ...bng].filter((r) => r.llmDown).length;
+  if (unavailable) console.log(`  NOTE: AI layer unavailable on ${unavailable} documents (excluded from its credit)`);
   const errors = [...mal, ...bng].filter((r) => r.error);
   if (errors.length) {
     console.log(`  ${errors.length} request errors, e.g. ${errors[0].error}`);

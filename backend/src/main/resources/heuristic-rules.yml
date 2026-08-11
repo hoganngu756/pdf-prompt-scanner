@@ -31,7 +31,10 @@ app:
       - phrase: "do not follow the rules"
 
       # --- Role hijack: assign a new persona to escape guardrails ---
-      - phrase: "you are now"
+      # "you are now" alone flags "You are now permitted to use a calculator".
+      # A role assignment is followed by an article or a state verb.
+      - phrase: "\\byou are now\\s+(a|an|the|acting|operating|in|running)\\b"
+        regex: true
       - phrase: "from now on you"
       - phrase: "pretend you are"
       - phrase: "act as an unrestricted"
@@ -49,7 +52,10 @@ app:
         regex: true
       - phrase: "reveal your instructions"
       - phrase: "repeat the text above"
-      - phrase: "print your instructions"
+      # "Print your instructions from the portal" is ordinary workplace prose.
+      # Extraction attempts ask for them verbatim, or name the system prompt.
+      - phrase: "(reveal|print|repeat|output|show)\\s+(your|the)\\s+(system\\s+)?(instructions|prompt|rules)\\b.{0,40}\\b(verbatim|in full|word for word|exactly|above|preceding)"
+        regex: true
 
       # --- Output forcing: dictate the verdict regardless of content ---
       - phrase: "respond only with"
@@ -63,7 +69,10 @@ app:
       - phrase: "output only\\s+[\"'\u201c]|output only\\s+(?-i:[A-Z]{2,})"
         regex: true
       - phrase: "you must output"
-      - phrase: "always respond with"
+      # "Staff must always respond with ..." is about people. An instruction to
+      # a model appears as an imperative at the start of a sentence.
+      - phrase: "(^|[.!?\\n]\\s*)always respond with"
+        regex: true
       - phrase: "regardless of the content"
       - phrase: "regardless of what"
 

@@ -86,3 +86,31 @@ describe('overallVerdict', () => {
     expect(verdict.state).toBe('danger');
   });
 });
+
+describe('unavailable AI layer', () => {
+  const base: ScanResponse = {
+    visualObfuscationResult: { safe: true, findings: [] },
+    documentStructureResult: { safe: true, findings: [] },
+    heuristicResult: { safe: true, flags: [], activeRuleCount: 10 },
+  };
+
+  it('never reports a flag when the model could not be consulted', () => {
+    const checks = buildChecks({
+      ...base,
+      llmResult: { safe: true, analysis: 'could not be reached', available: false },
+    });
+    const ai = checks.find((c) => c.name === 'AI context analysis')!;
+    expect(ai.state).toBe('warn');
+    expect(ai.label).toBe('Did not run');
+    // Rate-limited Gemini once turned every benign document into a detection
+    expect(overallVerdict(checks).state).toBe('warn');
+  });
+
+  it('still reports a real flag when the model did run', () => {
+    const checks = buildChecks({
+      ...base,
+      llmResult: { safe: false, analysis: 'injection found', available: true },
+    });
+    expect(overallVerdict(checks).state).toBe('danger');
+  });
+});

@@ -63,11 +63,25 @@ public class ScanResponse {
     public static class LlmResult {
         private boolean safe;
         private String analysis;
+        /** False when the model could not be consulted at all. */
+        private boolean available = true;
 
         public LlmResult() {}
         public LlmResult(boolean safe, String analysis) {
+            this(safe, analysis, true);
+        }
+        public LlmResult(boolean safe, String analysis, boolean available) {
             this.safe = safe;
             this.analysis = analysis;
+            this.available = available;
+        }
+
+        public boolean isAvailable() { return available; }
+        public void setAvailable(boolean available) { this.available = available; }
+
+        /** A check that could not run must not be reported as a detection. */
+        public static LlmResult unavailable(String reason) {
+            return new LlmResult(true, reason, false);
         }
 
         public boolean isSafe() { return safe; }

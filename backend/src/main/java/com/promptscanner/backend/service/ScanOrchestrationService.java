@@ -75,7 +75,7 @@ public class ScanOrchestrationService {
         if (useLLM) {
             ScanResponse.LlmResult lResult = llmScannerService.scan(extractedText);
             response.setLlmResult(lResult);
-            if (!lResult.isSafe()) {
+            if (lResult.isAvailable() && !lResult.isSafe()) {
                 isOverallSafe = false;
             }
         }
