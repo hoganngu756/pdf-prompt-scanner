@@ -7,6 +7,10 @@ backend/application-secrets.properties
 .env.*
 !.env.example
 
+# Local agent tooling. Kept out of the repo because these files describe where
+# the scanner is weak, which is not something a public repo should hand out.
+.claude/
+
 # ===== Local data =====
 # SQLite database plus the journal/WAL sidecars it creates while running.
 *.db
