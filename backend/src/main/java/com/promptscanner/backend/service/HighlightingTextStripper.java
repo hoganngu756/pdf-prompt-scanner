@@ -11,11 +11,15 @@ import org.apache.pdfbox.contentstream.operator.color.SetNonStrokingDeviceCMYKCo
 import org.apache.pdfbox.contentstream.operator.color.SetNonStrokingDeviceGrayColor;
 import org.apache.pdfbox.contentstream.operator.color.SetNonStrokingDeviceRGBColor;
 import org.apache.pdfbox.pdmodel.graphics.state.RenderingMode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.*;
 
 public class HighlightingTextStripper extends PDFTextStripper {
+
+    private static final Logger log = LoggerFactory.getLogger(HighlightingTextStripper.class);
 
     private final Set<String> highlightWords;
     private final List<String> visualObfuscationFindings = new ArrayList<>();
@@ -33,6 +37,28 @@ public class HighlightingTextStripper extends PDFTextStripper {
     private static final float TRANSPARENT_ALPHA = 0.05f;
     /** Share of glyphs in a run that must be hidden before the run is reported. */
     private static final double HIDDEN_RUN_THRESHOLD = 0.8;
+
+    /**
+     * Ceiling on glyphs whose paint state is retained for one page.
+     *
+     * PDFTextStripper deliberately discards glyphs drawn on top of already-painted
+     * ones; this subclass keeps every one it is handed, so without a ceiling a
+     * single page is unbounded. Deflate compresses a repeated "draw at the same
+     * coordinates" run about 330:1, which turned a 7.6 KB upload into an
+     * OutOfMemoryError on a 128 MB heap -- and OOM is an Error, so it unwinds past
+     * every catch in the request path and takes the instance with it.
+     */
+    private static final int MAX_TRACKED_GLYPHS_PER_PAGE = 200_000;
+
+    /** Ceiling on reported hidden-text runs, mirroring PdfStructureScanner's caps. */
+    private static final int MAX_VISUAL_FINDINGS = 200;
+    /** Findings are display strings; the quoted run is trimmed to keep them bounded. */
+    private static final int MAX_FINDING_TEXT_CHARS = 500;
+    /** Ceiling on highlight rectangles per page, which also bounds the drawn overlay. */
+    private static final int MAX_HIGHLIGHTS_PER_PAGE = 500;
+
+    private int trackedGlyphs = 0;
+    private boolean glyphCapReported = false;
 
     public HighlightingTextStripper(Set<String> highlightWords) throws IOException {
         this.highlightWords = highlightWords;
@@ -52,11 +78,27 @@ public class HighlightingTextStripper extends PDFTextStripper {
         characterColors.clear();
         invisibleModeGlyphs.clear();
         transparentGlyphs.clear();
+        trackedGlyphs = 0;
+        glyphCapReported = false;
     }
 
     @Override
     protected void processTextPosition(TextPosition text) {
+        // The ceiling is applied BEFORE delegating, because the parent accumulates
+        // glyphs for the page in its own list: PDFTextStripper alone, with none of
+        // this class involved, dies on a 510 KB page of distinct-position glyphs at
+        // a 1 GB heap. Dropping the glyph here is the only way to keep it out of
+        // that list. Extraction for the rest of the page is given up deliberately --
+        // a partial scan beats an OutOfMemoryError, which is an Error and so unwinds
+        // past every catch in the request path.
+        if (trackedGlyphs >= MAX_TRACKED_GLYPHS_PER_PAGE) {
+            reportGlyphCap();
+            return;
+        }
+        trackedGlyphs++;
+
         super.processTextPosition(text);
+
         org.apache.pdfbox.pdmodel.graphics.color.PDColor color = getGraphicsState().getNonStrokingColor();
         if (color != null && color.getColorSpace() != null) {
             try {
@@ -139,23 +181,62 @@ public class HighlightingTextStripper extends PDFTextStripper {
 
         if (!reasons.isEmpty()) {
             String trimmedText = text.trim();
-            if (!trimmedText.isEmpty()) {
+            // Both lists are serialised into the scan response, so a document made of
+            // hidden runs would otherwise amplify a small upload into a multi-megabyte
+            // body -- expensive to build, and enough to hang the browser rendering it.
+            if (!trimmedText.isEmpty() && visualObfuscationFindings.size() < MAX_VISUAL_FINDINGS) {
                 visualObfuscationFindings.add(String.format("Page %d: Hidden text via %s: '%s'",
-                        getCurrentPageNo(), String.join(" + ", reasons), trimmedText));
+                        getCurrentPageNo(), String.join(" + ", reasons), truncate(trimmedText)));
 
-                PDRectangle rect = computeBoundingBox(textPositions);
-                highlightsPerPage.computeIfAbsent(currentPageIndex, k -> new ArrayList<>()).add(rect);
+                addHighlight(computeBoundingBox(textPositions));
             }
         }
 
         String lowerText = text.toLowerCase();
         for (String word : highlightWords) {
             if (lowerText.contains(word)) {
-                PDRectangle rect = computeBoundingBox(textPositions);
-                highlightsPerPage.computeIfAbsent(currentPageIndex, k -> new ArrayList<>()).add(rect);
+                addHighlight(computeBoundingBox(textPositions));
                 break;
             }
         }
+    }
+
+    /**
+     * Records the glyph ceiling once per page, as a finding rather than only a log
+     * line. Giving up extraction silently would hand an author an evasion route --
+     * pad a page past the ceiling, then hide the payload behind it -- so the
+     * truncation is reported to the reader. A page carrying this many glyphs is
+     * itself abnormal: a densely typeset one runs to a few thousand.
+     */
+    private void reportGlyphCap() {
+        if (glyphCapReported) {
+            return;
+        }
+        glyphCapReported = true;
+        log.warn("Page {} exceeded {} glyphs; text extraction and visual-obfuscation "
+                        + "analysis are truncated for the remainder of the page.",
+                getCurrentPageNo(), MAX_TRACKED_GLYPHS_PER_PAGE);
+        if (visualObfuscationFindings.size() < MAX_VISUAL_FINDINGS) {
+            visualObfuscationFindings.add(String.format(
+                    "Page %d: Abnormal glyph volume — over %,d text-drawing operations on a single "
+                            + "page. Analysis of this page was truncated, and content beyond that point "
+                            + "was not examined.",
+                    getCurrentPageNo(), MAX_TRACKED_GLYPHS_PER_PAGE));
+        }
+    }
+
+    /** Bounds the rectangles held per page, and with them the overlay drawn onto it. */
+    private void addHighlight(PDRectangle rect) {
+        List<PDRectangle> rects = highlightsPerPage.computeIfAbsent(currentPageIndex, k -> new ArrayList<>());
+        if (rects.size() < MAX_HIGHLIGHTS_PER_PAGE) {
+            rects.add(rect);
+        }
+    }
+
+    private static String truncate(String value) {
+        return value.length() <= MAX_FINDING_TEXT_CHARS
+                ? value
+                : value.substring(0, MAX_FINDING_TEXT_CHARS) + "…";
     }
 
     /**

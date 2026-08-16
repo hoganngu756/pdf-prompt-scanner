@@ -43,7 +43,9 @@ public class PdfPreviewRenderer {
      * bounded regardless of what the document declares.
      */
     private static final double MAX_PREVIEW_PIXELS = 4_000_000d;
-    private static final float MIN_PREVIEW_DPI = 12f;
+
+    /** Returned for a page whose declared size admits no usable in-budget DPI. */
+    static final float DPI_UNRENDERABLE = 0f;
 
     /** Cap on how many pages are rendered per scan, whatever the document size. */
     private static final int MAX_RENDERED_PAGES = 5;
@@ -51,7 +53,11 @@ public class PdfPreviewRenderer {
     /** Rendered previews plus the 1-based source page numbers they correspond to. */
     public record Previews(List<String> imagesBase64, List<Integer> pageNumbers) {}
 
-    /** Chooses the largest DPI up to {@link #PREVIEW_DPI} that stays within the pixel budget. */
+    /**
+     * Chooses the largest DPI up to {@link #PREVIEW_DPI} that stays within the pixel
+     * budget, or {@link #DPI_UNRENDERABLE} for a page whose declared geometry cannot
+     * be rendered within it at all.
+     */
     static float previewDpiFor(PDRectangle mediaBox) {
         float widthIn = Math.abs(mediaBox.getWidth()) / 72f;
         float heightIn = Math.abs(mediaBox.getHeight()) / 72f;
@@ -62,8 +68,16 @@ public class PdfPreviewRenderer {
         if (pixelsAtFullDpi <= MAX_PREVIEW_PIXELS) {
             return PREVIEW_DPI;
         }
+        // No lower clamp: a floor here would silently re-admit the very bitmaps the
+        // budget exists to reject. A 276000pt MediaBox needs 0.52 DPI to land inside
+        // 4 MP; flooring that at 12 DPI asks for 46000x46000 -- an 8 GB allocation
+        // from a 520 byte upload. The unclamped value is self-bounding, since
+        // inches * sqrt(BUDGET / inches^2) collapses to sqrt(BUDGET) either way.
         float scaled = (float) Math.sqrt(MAX_PREVIEW_PIXELS / (widthIn * heightIn));
-        return Math.max(MIN_PREVIEW_DPI, scaled);
+        // A MediaBox large enough to overflow the area computation leaves no DPI that
+        // both renders a non-empty bitmap and respects the budget; such a page is
+        // reported as unrenderable rather than clamped up into an allocation.
+        return Float.isFinite(scaled) && scaled > 0f ? scaled : DPI_UNRENDERABLE;
     }
 
     /**
@@ -97,6 +111,11 @@ public class PdfPreviewRenderer {
             drawHighlights(document, page, highlightsPerPage.getOrDefault(pageIndex, List.of()));
 
             float dpi = previewDpiFor(page.getMediaBox());
+            if (dpi == DPI_UNRENDERABLE) {
+                log.warn("Page {} declares an unrenderable MediaBox ({}x{}pt); skipping its preview.",
+                        pageIndex + 1, page.getMediaBox().getWidth(), page.getMediaBox().getHeight());
+                continue;
+            }
             if (dpi < PREVIEW_DPI) {
                 log.warn("Page {} is {}x{}pt; reducing preview to {} DPI to stay within the pixel budget.",
                         pageIndex + 1, page.getMediaBox().getWidth(), page.getMediaBox().getHeight(), dpi);

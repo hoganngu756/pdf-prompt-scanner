@@ -35,6 +35,19 @@ public class PdfScannerService {
     private static final int MAX_OCR_PAGES = 5;
     private static final int MAX_OCR_IMAGES = 10;
 
+    /**
+     * Ceiling on the text handed to the analysis layers.
+     *
+     * Page count and upload size are both capped, but neither bounds the text a
+     * document yields: a 510 KB file of stacked runs produced 7.2 million
+     * characters and 15.6 seconds of CPU, since deflate lets a small upload buy a
+     * very large content stream. That text then reaches the regex engine, the
+     * response body, and the Gemini prompt, so it is bounded once here at the
+     * source. A real document that trips this has already given every layer far
+     * more than it needs to reach a verdict.
+     */
+    private static final int MAX_EXTRACTED_CHARS = 1_000_000;
+
     private final PdfStructureScanner pdfStructureScanner;
     private final PdfPreviewRenderer previewRenderer;
 
@@ -95,7 +108,7 @@ public class PdfScannerService {
 
             HighlightingTextStripper stripper = new HighlightingTextStripper(highlightWords);
             stripper.setSortByPosition(true);
-            String extractedText = stripper.getText(document);
+            String extractedText = truncateExtracted(stripper.getText(document));
             List<String> visualFindings = stripper.getVisualObfuscationFindings();
             Map<Integer, List<PDRectangle>> highlightsPerPage = stripper.getHighlightsPerPage();
 
@@ -114,9 +127,24 @@ public class PdfScannerService {
 
             PdfPreviewRenderer.Previews previews = previewRenderer.render(document, highlightsPerPage);
 
-            return new PdfData(extractedText, previews.imagesBase64(), visualFindings,
+            return new PdfData(truncateExtracted(extractedText), previews.imagesBase64(), visualFindings,
                     structure.findings(), previews.pageNumbers());
         }
+    }
+
+    /**
+     * Applied to the page text before the metadata and OCR sections are appended,
+     * and again to the result, so neither the page content nor the total can run
+     * away. The marker is left in place so a truncated scan is visible rather than
+     * silently partial.
+     */
+    private static String truncateExtracted(String text) {
+        if (text == null || text.length() <= MAX_EXTRACTED_CHARS) {
+            return text;
+        }
+        log.warn("Extracted text of {} chars exceeds the {} char limit; truncating.",
+                text.length(), MAX_EXTRACTED_CHARS);
+        return text.substring(0, MAX_EXTRACTED_CHARS) + "\n\n--- TEXT TRUNCATED AT SCAN LIMIT ---";
     }
 
     /**

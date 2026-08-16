@@ -21,6 +21,17 @@ public class LlmScannerService {
 
     private static final Logger log = LoggerFactory.getLogger(LlmScannerService.class);
 
+    /**
+     * Ceiling on the characters sent upstream, roughly 25k tokens.
+     *
+     * PdfScannerService already bounds what it extracts, but this layer is the one
+     * that costs money per character and is reachable on demand -- useLLM is a
+     * request parameter, so an anonymous caller chooses whether it runs. Clamping
+     * here as well keeps the spend bounded even if an upstream cap is later raised
+     * or a new text source is added.
+     */
+    private static final int MAX_INPUT_CHARS = 100_000;
+
     @Value("${gemini.api.key:}")
     private String geminiApiKey;
 
@@ -48,8 +59,15 @@ public class LlmScannerService {
             // header keeps the credential out of all of them.
             String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
+            String boundedText = text;
+            if (boundedText.length() > MAX_INPUT_CHARS) {
+                log.info("Truncating {} chars of extracted text to {} for AI analysis.",
+                        boundedText.length(), MAX_INPUT_CHARS);
+                boundedText = boundedText.substring(0, MAX_INPUT_CHARS);
+            }
+
             // Prevent tag smuggling by escaping document tags in user content
-            String sanitizedText = text
+            String sanitizedText = boundedText
                     .replace("<document>", "&lt;document&gt;")
                     .replace("</document>", "&lt;/document&gt;");
 
