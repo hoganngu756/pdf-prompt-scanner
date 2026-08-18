@@ -91,18 +91,18 @@ export default function ExamplePdfs({ onSelectSample }: ExamplePdfsProps) {
   return (
     <section>
       <div className="section-head">
-        <span className="eyebrow">Sample documents</span>
+        <h3 className="eyebrow">Sample documents</h3>
         <span className="eyebrow tabular">{SAMPLES.length}</span>
       </div>
 
       <div className="sample-list">
         {SAMPLES.map((sample) => (
           <div key={sample.filename} className="sample-row">
-            <span className="sample-name">
-              <span className={`sample-dot ${sample.safe ? 'is-safe' : 'is-danger'}`} aria-hidden="true" />
-              {sample.label}
-            </span>
+            <span className="sample-name">{sample.label}</span>
             <span className="sample-actions">
+              <span className={`status is-${sample.safe ? 'safe' : 'danger'}`}>
+                {sample.safe ? 'Clean' : 'Malicious'}
+              </span>
               <button className="btn-secondary" onClick={() => handleTrySample(sample)}>
                 Scan
               </button>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { toast } from 'react-hot-toast';
+import { AlertTriangle, RotateCw } from 'lucide-react';
 import { HeuristicRule } from '../types';
 import { api } from '../api';
 
@@ -14,17 +14,25 @@ import { api } from '../api';
 export default function RulesManager() {
   const [rules, setRules] = useState<HeuristicRule[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  // A failed fetch must not fall through to the empty state: "no rules configured"
+  // is a claim about the scanner's configuration, and we have no grounds to make it
+  // when we never heard back from the server.
+  const loadRules = () => {
+    setLoading(true);
+    setError(null);
     api
       .listRules()
       .then(setRules)
       .catch((err) => {
         console.error(err);
-        toast.error(err instanceof Error ? err.message : 'Failed to load rules');
+        setError(err instanceof Error ? err.message : 'Failed to load rules');
       })
       .finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { loadRules(); }, []);
 
   return (
     <>
@@ -42,6 +50,22 @@ export default function RulesManager() {
         <div className="empty-state">
           <span>Loading rules…</span>
         </div>
+      ) : error ? (
+        <div className="notice is-warn" role="alert">
+          <AlertTriangle size={16} />
+          <div>
+            <strong>Could not load the rule set</strong>
+            {error}
+            <p>
+              This is a display failure, not a scanner one — it does not mean the engine
+              has no rules. Scanning is unaffected.
+            </p>
+            <button type="button" className="btn-secondary" onClick={loadRules}>
+              <RotateCw size={14} />
+              Try again
+            </button>
+          </div>
+        </div>
       ) : rules.length === 0 ? (
         <div className="empty-state">
           <strong>No rules configured</strong>
@@ -50,10 +74,10 @@ export default function RulesManager() {
       ) : (
         <>
           <div className="section-head">
-            <span className="eyebrow">Rules</span>
+            <h3 className="eyebrow">Rules</h3>
             <span className="eyebrow tabular">{rules.length}</span>
           </div>
-          <div className="table-wrap">
+          <div className="table-wrap" tabIndex={0} role="region" aria-label="Detection rules">
             <table>
               <thead>
                 <tr>
@@ -73,7 +97,7 @@ export default function RulesManager() {
               </tbody>
             </table>
           </div>
-          <p className="field-hint" style={{ marginTop: 'var(--s-4)' }}>
+          <p className="field-hint table-footnote">
             Edit <code>backend/src/main/resources/heuristic-rules.yml</code> and restart the
             server to change this set.
           </p>

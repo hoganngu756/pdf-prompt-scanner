@@ -7,7 +7,7 @@ export default function WelcomeGuide() {
   return (
     <section className="explainer">
       <div className="section-head">
-        <span className="eyebrow">What this looks for</span>
+        <h3 className="eyebrow">What this looks for</h3>
       </div>
 
       <p className="explainer-lede">

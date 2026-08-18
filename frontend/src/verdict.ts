@@ -1,4 +1,4 @@
-import { ScanResponse } from './types';
+import { Finding, ScanResponse } from './types';
 
 export type CheckState = 'danger' | 'safe' | 'warn';
 
@@ -6,8 +6,8 @@ export interface Check {
   name: string;
   state: CheckState;
   label: string;
-  /** Recovered document text — rendered as quoted evidence, in monospace. */
-  evidence?: string[];
+  /** Reported observations. Only `description` is ours; the rest is quoted. */
+  evidence?: Finding[];
   /** Our own prose about the check — rendered as ordinary copy. */
   note?: string;
 }

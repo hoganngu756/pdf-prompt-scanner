@@ -1,35 +1,80 @@
 import { useState, useEffect } from 'react';
 import {
-  AlertTriangle, ShieldCheck, HelpCircle, ChevronLeft, ChevronRight, Loader2,
+  AlertTriangle, ShieldCheck, HelpCircle, ChevronLeft, ChevronRight, Loader2, RotateCw,
 } from 'lucide-react';
 import { ScanResponse } from '../types';
 import { buildChecks, overallVerdict, Check } from '../verdict';
+
+// A single check can carry hundreds of findings — the backend caps visual findings
+// at 200 and structure findings at 400 more. Past the first handful nobody is
+// reading them, and the full list buries the verdict and the page preview.
+const EVIDENCE_PREVIEW_COUNT = 10;
+
+// Past this the scan is almost certainly waiting on a cold backend rather than a
+// large document, and saying so is more use than repeating the phase list.
+const SLOW_SCAN_SECONDS = 20;
 
 interface ResultsDashboardProps {
   results: ScanResponse | null;
   loading: boolean;
   fileName?: string;
+  onRetry?: () => void;
+  onCancel?: () => void;
 }
 
-export default function ResultsDashboard({ results, loading, fileName }: ResultsDashboardProps) {
+export default function ResultsDashboard({ results, loading, fileName, onRetry, onCancel }: ResultsDashboardProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [expandedChecks, setExpandedChecks] = useState<Set<string>>(new Set());
+  const [elapsed, setElapsed] = useState(0);
 
-  useEffect(() => { setCurrentIndex(0); }, [results]);
+  // The spinner is frozen for anyone on prefers-reduced-motion, so a scan needs a
+  // progress signal that is text.
+  useEffect(() => {
+    if (!loading) {
+      setElapsed(0);
+      return;
+    }
+    const startedAt = Date.now();
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - startedAt) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [loading]);
+
+  useEffect(() => {
+    setCurrentIndex(0);
+    setExpandedChecks(new Set());
+  }, [results]);
+
+  const toggleEvidence = (name: string) => {
+    setExpandedChecks((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
 
   if (loading) {
     return (
-      <section className="scan-progress" aria-live="polite" aria-busy="true">
+      <section className="scan-progress" aria-busy="true">
         <div className="scan-progress-status">
           <Loader2 size={18} className="animate-spin" />
           <span>Analysing document…</span>
+          <span className="scan-progress-elapsed tabular">{elapsed}s</span>
         </div>
         <p className="scan-progress-note">
-          Extracting text, inspecting document structure, rendering page previews and
-          running the enabled checks. The first scan can take up to a minute while the
-          backend wakes up.
+          {elapsed < SLOW_SCAN_SECONDS
+            ? `Extracting text, inspecting document structure, rendering page previews and
+               running the enabled checks.`
+            : `Still working. The first scan can take up to a minute while the backend
+               wakes up — the document is not being re-read.`}
         </p>
         <div className="skeleton skeleton-card" />
         <div className="skeleton skeleton-preview" />
+        {onCancel && (
+          <button type="button" className="btn-secondary scan-progress-cancel" onClick={onCancel}>
+            Cancel scan
+          </button>
+        )}
       </section>
     );
   }
@@ -45,11 +90,24 @@ export default function ResultsDashboard({ results, loading, fileName }: Results
 
   if (results.error) {
     return (
-      <section className="notice is-danger" role="alert">
-        <AlertTriangle size={16} />
+      <section className="verdict is-warn is-failure">
+        <div className="verdict-icon">
+          <AlertTriangle size={22} />
+        </div>
         <div>
-          <strong>Scan failed</strong>
-          {results.error}
+          <h3 className="verdict-headline">Scan failed</h3>
+          <p className="verdict-summary">{results.error}</p>
+          {fileName && (
+            <div className="verdict-meta">
+              <span>{fileName}</span>
+            </div>
+          )}
+          {onRetry && (
+            <button type="button" className="btn-secondary verdict-retry" onClick={onRetry}>
+              <RotateCw size={14} />
+              Try again
+            </button>
+          )}
         </div>
       </section>
     );
@@ -64,7 +122,7 @@ export default function ResultsDashboard({ results, loading, fileName }: Results
 
   return (
     <>
-      <section className={`verdict is-${verdict.state}`} aria-live="polite">
+      <section className={`verdict is-${verdict.state}`}>
         <div className="verdict-icon">
           {verdict.state === 'safe' ? <ShieldCheck size={22} />
             : verdict.state === 'warn' ? <HelpCircle size={22} />
@@ -86,31 +144,56 @@ export default function ResultsDashboard({ results, loading, fileName }: Results
 
       <section>
         <div className="section-head">
-          <span className="eyebrow">Checks</span>
+          <h3 className="eyebrow">Checks</h3>
           <span className="eyebrow tabular">{checks.length} run</span>
         </div>
         <div className="check-list">
-          {checks.map((check) => (
-            <div key={check.name} className={`check is-${check.state}`}>
-              <span className="check-name">{check.name}</span>
-              <span className={`status is-${check.state}`}>{check.label}</span>
-              {check.note && <p className="check-note">{check.note}</p>}
-              {check.evidence && check.evidence.length > 0 && (
-                <ul className="evidence-list">
-                  {check.evidence.map((item, idx) => (
-                    <li key={idx} className="evidence">{item}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ))}
+          {checks.map((check) => {
+            const evidence = check.evidence ?? [];
+            const isExpanded = expandedChecks.has(check.name);
+            const visible = isExpanded ? evidence : evidence.slice(0, EVIDENCE_PREVIEW_COUNT);
+
+            return (
+              <div key={check.name} className={`check is-${check.state}`}>
+                <span className="check-name">{check.name}</span>
+                <span className={`status is-${check.state}`}>{check.label}</span>
+                {check.note && <p className="check-note">{check.note}</p>}
+                {visible.length > 0 && (
+                  <ul className="evidence-list">
+                    {visible.map((finding, idx) => (
+                      <li key={idx} className="evidence">
+                        <span className="evidence-description">{finding.description}</span>
+                        {finding.location && (
+                          <span className="evidence-location">{finding.location}</span>
+                        )}
+                        {finding.quote && <q className="evidence-quote">{finding.quote}</q>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {evidence.length > EVIDENCE_PREVIEW_COUNT && (
+                  <button
+                    type="button"
+                    className="btn-secondary evidence-more"
+                    aria-expanded={isExpanded}
+                    aria-label={isExpanded
+                      ? `Show only the first ${EVIDENCE_PREVIEW_COUNT} of ${evidence.length} for ${check.name}`
+                      : `Show all ${evidence.length} for ${check.name}`}
+                    onClick={() => toggleEvidence(check.name)}
+                  >
+                    {isExpanded ? 'Show fewer' : `Show all ${evidence.length}`}
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
       </section>
 
       {previews.length > 0 && (
         <section className="preview">
           <div className="preview-header">
-            <span className="eyebrow">Page preview</span>
+            <h3 className="eyebrow">Page preview</h3>
             <span className="preview-count tabular">
               {sourcePage
                 ? `page ${sourcePage}${previews.length > 1 ? ` — ${currentIndex + 1}/${previews.length}` : ''}`

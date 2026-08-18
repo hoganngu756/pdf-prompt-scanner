@@ -60,6 +60,19 @@ export function recordScan(fileName: string, results: ScanResponse): HistoryEntr
   return next;
 }
 
+/**
+ * Puts a cleared list back. Clearing is unrecoverable otherwise — this is the
+ * only copy of these scans and it lives in one browser.
+ */
+export function restoreHistory(entries: HistoryEntry[]): HistoryEntry[] {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+  } catch {
+    // ignore
+  }
+  return entries;
+}
+
 export function clearHistory(): HistoryEntry[] {
   try {
     localStorage.removeItem(STORAGE_KEY);

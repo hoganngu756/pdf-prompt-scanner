@@ -50,7 +50,10 @@ async function request<T>(path: string, init: RequestInit, fallback: string): Pr
   let response: Response;
   try {
     response = await fetch(`${API_BASE_URL}${path}`, init);
-  } catch {
+  } catch (err) {
+    // A caller-triggered abort is not a failure to reach the backend; it has to
+    // stay distinguishable so the UI doesn't report a cancellation as an error.
+    if ((err as Error)?.name === 'AbortError') throw err;
     // Network-level failure: no response at all, so status 0.
     throw new ApiError('Could not reach the scanner backend. Is it running?', 0);
   }
@@ -61,13 +64,13 @@ async function request<T>(path: string, init: RequestInit, fallback: string): Pr
 }
 
 export const api = {
-  scan(file: File, useLLM: boolean, useHeuristics: boolean): Promise<ScanResponse> {
+  scan(file: File, useLLM: boolean, useHeuristics: boolean, signal?: AbortSignal): Promise<ScanResponse> {
     const form = new FormData();
     form.append('file', file);
     form.append('useLLM', String(useLLM));
     form.append('useHeuristics', String(useHeuristics));
     // No Content-Type header: the browser must set the multipart boundary itself.
-    return request<ScanResponse>('/scan', { method: 'POST', body: form }, 'Failed to scan document');
+    return request<ScanResponse>('/scan', { method: 'POST', body: form, signal }, 'Failed to scan document');
   },
 
   listRules(): Promise<HeuristicRule[]> {

@@ -1,6 +1,7 @@
 package com.promptscanner.backend.service;
 
 import com.promptscanner.backend.config.HeuristicRuleProperties;
+import com.promptscanner.backend.dto.Finding;
 import com.promptscanner.backend.dto.ScanResponse;
 import com.promptscanner.backend.util.TextNormalizer;
 import org.slf4j.Logger;
@@ -80,15 +81,15 @@ public class HeuristicScannerService {
     }
 
     public ScanResponse.HeuristicResult scan(String text) {
-        List<String> flags = new ArrayList<>();
+        List<Finding> flags = new ArrayList<>();
         List<HeuristicRuleProperties.Rule> rules = ruleProperties.getRules();
 
         if (rules.isEmpty()) {
             // No rules means the engine checked nothing. Reporting "safe" here would
             // render a green badge for a scanner that is effectively switched off.
             log.warn("Heuristic scan requested but no rules are configured; reporting as not safe.");
-            flags.add("Heuristic engine has no rules configured — this document was not checked. "
-                    + "Add rules to heuristic-rules.yml and restart.");
+            flags.add(Finding.of("Heuristic engine has no rules configured — this document was not "
+                    + "checked. Add rules to heuristic-rules.yml and restart."));
             return new ScanResponse.HeuristicResult(false, flags, 0);
         }
 
@@ -109,8 +110,9 @@ public class HeuristicScannerService {
                     // If the raw text didn't match, the phrase was actively disguised --
                     // worth saying so, since that is itself evidence of intent.
                     boolean neededUnmasking = !pattern.matcher(text).find();
-                    flags.add("Detected suspicious " + matchType + " matching: '" + rule.getPhrase() + "'"
-                            + (neededUnmasking ? " (disguised with lookalike or hidden characters)" : ""));
+                    flags.add(Finding.quoting("Detected suspicious " + matchType
+                            + (neededUnmasking ? ", disguised with lookalike or hidden characters" : ""),
+                            rule.getPhrase()));
                 }
             } catch (PatternSyntaxException e) {
                 // A bad regex is now a config error caught at boot, but stay resilient

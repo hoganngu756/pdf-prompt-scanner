@@ -25,12 +25,12 @@ export default function HistoryTable({ history, onClear }: HistoryTableProps) {
       ) : (
         <>
           <div className="section-head">
-            <span className="eyebrow">This browser</span>
+            <h3 className="eyebrow">This browser</h3>
             <button className="btn-secondary" onClick={onClear}>
               <Trash2 size={13} /> Clear history
             </button>
           </div>
-          <div className="table-wrap">
+          <div className="table-wrap" tabIndex={0} role="region" aria-label="Scan history">
             <table>
               <thead>
                 <tr>
@@ -50,7 +50,7 @@ export default function HistoryTable({ history, onClear }: HistoryTableProps) {
                     </td>
                     <td className="cell-filename">{entry.fileName}</td>
                     <td>
-                      <span className={`status is-${entry.state}`}>{entry.headline}</span>
+                      <span className={`status is-sentence is-${entry.state}`}>{entry.headline}</span>
                     </td>
                     <td className="cell-details">
                       {entry.findings.length > 0 ? entry.findings.join('\n') : '—'}

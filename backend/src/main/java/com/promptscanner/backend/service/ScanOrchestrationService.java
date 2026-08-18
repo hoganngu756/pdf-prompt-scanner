@@ -1,5 +1,6 @@
 package com.promptscanner.backend.service;
 
+import com.promptscanner.backend.dto.Finding;
 import com.promptscanner.backend.dto.ScanResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,7 +50,7 @@ public class ScanOrchestrationService {
         boolean isOverallSafe = true;
 
         // Visual obfuscation
-        List<String> voFindings = pdfData.visualObfuscationFindings();
+        List<Finding> voFindings = pdfData.visualObfuscationFindings();
         response.setVisualObfuscationResult(
                 new ScanResponse.VisualObfuscationResult(voFindings.isEmpty(), voFindings));
         if (!voFindings.isEmpty()) {
@@ -57,7 +58,7 @@ public class ScanOrchestrationService {
         }
 
         // Document structure: metadata, annotations, active content
-        List<String> structureFindings = pdfData.structureFindings();
+        List<Finding> structureFindings = pdfData.structureFindings();
         response.setDocumentStructureResult(
                 new ScanResponse.DocumentStructureResult(structureFindings.isEmpty(), structureFindings));
         if (!structureFindings.isEmpty()) {

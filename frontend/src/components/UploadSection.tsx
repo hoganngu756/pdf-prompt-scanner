@@ -48,7 +48,7 @@ export default function UploadSection({
 
   return (
     <section className="upload-section">
-      <span className="rail-heading">Document</span>
+      <h3 className="rail-heading">Document</h3>
 
       <div
         className={`file-drop-zone ${dragActive ? 'active' : ''} ${file ? 'has-file' : ''}`}
@@ -67,7 +67,7 @@ export default function UploadSection({
         <div className="file-drop-icon">
           {file ? <FileText size={22} /> : <FileUp size={22} />}
         </div>
-        <h3>{file ? file.name : 'Drop a PDF here'}</h3>
+        <p className="file-drop-title">{file ? file.name : 'Drop a PDF here'}</p>
         <p>{file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : 'or click to browse · max 10 MB'}</p>
         <input
           id="file-upload"
@@ -88,10 +88,9 @@ export default function UploadSection({
             Visual obfuscation
             <span className="option-note">always</span>
           </div>
-          <div className="option-tooltip">
-            <strong>Visual obfuscation</strong>
-            <p>Invisible rendering mode, transparent fill, white-on-white text and fonts under 3pt.</p>
-          </div>
+          <p className="option-desc">
+            Invisible rendering mode, transparent fill, white-on-white text and fonts under 3pt.
+          </p>
         </div>
 
         <div className="settings-option">
@@ -99,10 +98,10 @@ export default function UploadSection({
             Document structure
             <span className="option-note">always</span>
           </div>
-          <div className="option-tooltip">
-            <strong>Document structure</strong>
-            <p>Metadata, annotations, bookmarks and form fields, plus embedded JavaScript and auto-run actions.</p>
-          </div>
+          <p className="option-desc">
+            Metadata, annotations, bookmarks and form fields, plus embedded JavaScript and
+            auto-run actions.
+          </p>
         </div>
 
         <div className="settings-option">
@@ -110,10 +109,10 @@ export default function UploadSection({
             <input type="checkbox" checked={useHeuristics} onChange={(e) => setUseHeuristics(e.target.checked)} />
             Heuristic rules
           </label>
-          <div className="option-tooltip">
-            <strong>Heuristic rules</strong>
-            <p>Literal and regex patterns from your rule set, tolerant of spacing, punctuation and lookalike characters.</p>
-          </div>
+          <p className="option-desc">
+            Literal and regex patterns from your rule set, tolerant of spacing, punctuation
+            and lookalike characters.
+          </p>
         </div>
 
         <div className="settings-option">
@@ -121,10 +120,10 @@ export default function UploadSection({
             <input type="checkbox" checked={useLLM} onChange={(e) => setUseLLM(e.target.checked)} />
             AI context analysis
           </label>
-          <div className="option-tooltip">
-            <strong>AI context analysis</strong>
-            <p>Gemini reads the extracted text and judges intent, catching novel injections no static rule covers.</p>
-          </div>
+          <p className="option-desc">
+            Gemini reads the extracted text and judges intent, catching novel injections no
+            static rule covers.
+          </p>
         </div>
       </div>
 

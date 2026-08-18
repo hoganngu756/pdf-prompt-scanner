@@ -1,3 +1,14 @@
+/**
+ * One reported observation. `description` is the scanner's own prose; `location`
+ * and `quote` are recovered from the uploaded document and are therefore
+ * attacker-controlled — they must never be rendered as if they were our words.
+ */
+export interface Finding {
+  description: string;
+  location?: string;
+  quote?: string;
+}
+
 export interface HeuristicRule {
   phrase: string;
   isRegex: boolean;
@@ -5,7 +16,7 @@ export interface HeuristicRule {
 
 export interface HeuristicResult {
   safe: boolean;
-  flags: string[];
+  flags: Finding[];
   /** Rules the document was actually checked against. Zero means the engine is not configured. */
   activeRuleCount?: number;
 }
@@ -19,12 +30,12 @@ export interface LlmResult {
 
 export interface VisualObfuscationResult {
   safe: boolean;
-  findings: string[];
+  findings: Finding[];
 }
 
 export interface DocumentStructureResult {
   safe: boolean;
-  findings: string[];
+  findings: Finding[];
 }
 
 export interface ScanResponse {

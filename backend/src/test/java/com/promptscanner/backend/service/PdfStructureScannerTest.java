@@ -68,7 +68,7 @@ class PdfStructureScannerTest {
                     new org.apache.pdfbox.cos.COSDictionary());
 
             assertTrue(scanner.scan(doc).findings().stream()
-                    .anyMatch(f -> f.contains("OpenAction")));
+                    .anyMatch(f -> f.description().contains("OpenAction")));
         }
     }
 

@@ -1,5 +1,6 @@
 package com.promptscanner.backend.service;
 
+import com.promptscanner.backend.dto.Finding;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -86,9 +87,9 @@ public class PdfScannerService {
     public record PdfData(
         String extractedText,
         List<String> previewImagesBase64,
-        List<String> visualObfuscationFindings,
+        List<Finding> visualObfuscationFindings,
         /** Findings from document structure: metadata, annotations, active content. */
-        List<String> structureFindings,
+        List<Finding> structureFindings,
         /** 1-based page numbers matching previewImagesBase64 by index. Only flagged
          *  pages are rendered, so these are not contiguous and must not be inferred
          *  from list position. */
@@ -109,7 +110,7 @@ public class PdfScannerService {
             HighlightingTextStripper stripper = new HighlightingTextStripper(highlightWords);
             stripper.setSortByPosition(true);
             String extractedText = truncateExtracted(stripper.getText(document));
-            List<String> visualFindings = stripper.getVisualObfuscationFindings();
+            List<Finding> visualFindings = stripper.getVisualObfuscationFindings();
             Map<Integer, List<PDRectangle>> highlightsPerPage = stripper.getHighlightsPerPage();
 
             // Metadata, annotations and bookmarks never appear in the page content

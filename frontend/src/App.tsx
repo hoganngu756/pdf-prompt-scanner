@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Header from './components/Header'
 import UploadSection from './components/UploadSection'
 import ResultsDashboard from './components/ResultsDashboard'
@@ -11,13 +11,17 @@ import { ScanResponse } from './types'
 import './index.css'
 
 import { api } from './api'
-import { loadHistory, recordScan, clearHistory, HistoryEntry } from './scanHistory'
+import { buildChecks, overallVerdict } from './verdict'
+import { loadHistory, recordScan, clearHistory, restoreHistory, HistoryEntry } from './scanHistory'
 
 function App() {
   const [file, setFile] = useState<File | null>(null)
   const [useLLM, setUseLLM] = useState(true)
   const [useHeuristics, setUseHeuristics] = useState(true)
   const [results, setResults] = useState<ScanResponse | null>(null)
+  const [cancelled, setCancelled] = useState(false)
+  const abortRef = useRef<AbortController | null>(null)
+  const workRef = useRef<HTMLDivElement>(null)
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('scan')
   const [history, setHistory] = useState<HistoryEntry[]>(() => loadHistory())
@@ -55,23 +59,50 @@ function App() {
   // Takes the file explicitly so callers can scan immediately after selecting one,
   // without waiting for the `file` state update to land.
   const runScan = async (targetFile: File) => {
+    const controller = new AbortController()
+    abortRef.current = controller
     setLoading(true)
     setResults(null)
+    setCancelled(false)
 
     try {
-      const scanResults = await api.scan(targetFile, useLLM, useHeuristics)
+      const scanResults = await api.scan(targetFile, useLLM, useHeuristics, controller.signal)
       setResults(scanResults)
       // Recorded in this browser only; the server keeps nothing.
       setHistory(recordScan(targetFile.name, scanResults))
-      toast.success('Scan complete')
     } catch (error) {
+      // The user asked for this one; it is not a failure to report as one.
+      if ((error as Error)?.name === 'AbortError') {
+        setCancelled(true)
+        return
+      }
       console.error('Error during scan:', error)
       const errorMsg = error instanceof Error ? error.message : 'Failed to connect to the server'
-      toast.error(errorMsg)
       setResults({ error: errorMsg })
     } finally {
+      abortRef.current = null
       setLoading(false)
     }
+  }
+
+  const cancelScan = () => abortRef.current?.abort()
+
+  // Clearing is unrecoverable — this is the only copy of these scans. An undo is
+  // less interruptive than a confirm dialog and covers the same mistake.
+  const handleClearHistory = () => {
+    const cleared = history
+    setHistory(clearHistory())
+    toast((t) => (
+      <span className="toast-undo">
+        Scan history cleared
+        <button
+          className="btn-secondary"
+          onClick={() => { setHistory(restoreHistory(cleared)); toast.dismiss(t.id) }}
+        >
+          Undo
+        </button>
+      </span>
+    ), { duration: 8000 })
   }
 
   const handleScan = () => {
@@ -87,6 +118,30 @@ function App() {
     runScan(sampleFile)
   }
 
+  // Starting a scan from a sample row leaves the user scrolled past the results
+  // area, watching the guide it just unmounted. Bring the progress state to them.
+  useEffect(() => {
+    if (!loading || !workRef.current) return
+    // Already looking at it (the usual desktop case) — don't yank the page.
+    const { top } = workRef.current.getBoundingClientRect()
+    if (top >= 0 && top <= window.innerHeight) return
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    workRef.current.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' })
+  }, [loading])
+
+  // The dashboard can't carry aria-live itself: React mounts the region and its
+  // content in the same commit, which assistive tech doesn't reliably detect.
+  // This region is always present, and it announces the headline only — routing
+  // the whole report through it would read every finding aloud.
+  const announcement = (() => {
+    if (loading) return 'Scanning document.'
+    if (cancelled) return 'Scan cancelled.'
+    if (!results) return ''
+    if (results.error) return `Scan failed. ${results.error}`
+    const verdict = overallVerdict(buildChecks(results))
+    return `${verdict.headline}. ${verdict.summary}`
+  })()
+
   return (
     <div className="app-container">
       <Toaster
@@ -98,11 +153,18 @@ function App() {
             border: '1px solid var(--rule)',
             fontSize: 'var(--t-small)',
             borderRadius: 'var(--r-md)'
+          },
+          // The library's default icons ship their own saturated green/red, which
+          // is chroma we don't control. Only errors get a toast now, and its mark
+          // uses verdict red from the palette.
+          error: {
+            iconTheme: { primary: 'var(--danger)', secondary: 'var(--n-0)' }
           }
         }}
       />
       <Header activeTab={activeTab} setActiveTab={setActiveTab} />
 
+      <main>
       {activeTab === 'scan' && (
         <>
         <div className="page-header">
@@ -113,7 +175,7 @@ function App() {
             without ever being visible to a human reader.
           </p>
         </div>
-        <main className="main-content">
+        <div className="main-content">
           <div className="rail">
             <UploadSection
               file={file}
@@ -127,8 +189,15 @@ function App() {
               handleScan={handleScan}
             />
           </div>
-          <div className="work">
-            <ResultsDashboard results={results} loading={loading} fileName={file?.name} />
+          <div className="work" ref={workRef}>
+            <p className="sr-only" role="status" aria-live="polite">{announcement}</p>
+            <ResultsDashboard
+              results={results}
+              loading={loading}
+              fileName={file?.name}
+              onRetry={file ? () => runScan(file) : undefined}
+              onCancel={cancelScan}
+            />
             {/* Keep the guide visible until a *successful* scan replaces it, so an
                 error doesn't strand the user with no examples to retry from. */}
             {!loading && (!results || !!results.error) && (
@@ -138,17 +207,18 @@ function App() {
               </>
             )}
           </div>
-        </main>
+        </div>
         </>
       )}
 
       {activeTab === 'history' && (
-        <HistoryTable history={history} onClear={() => setHistory(clearHistory())} />
+        <HistoryTable history={history} onClear={handleClearHistory} />
       )}
 
       {activeTab === 'rules' && (
         <RulesManager />
       )}
+      </main>
     </div>
   )
 }

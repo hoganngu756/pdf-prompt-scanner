@@ -37,14 +37,14 @@ public class ScanResponse {
 
     public static class HeuristicResult {
         private boolean safe;
-        private List<String> flags;
+        private List<Finding> flags;
         private int activeRuleCount;
 
         public HeuristicResult() {}
-        public HeuristicResult(boolean safe, List<String> flags) {
+        public HeuristicResult(boolean safe, List<Finding> flags) {
             this(safe, flags, 0);
         }
-        public HeuristicResult(boolean safe, List<String> flags, int activeRuleCount) {
+        public HeuristicResult(boolean safe, List<Finding> flags, int activeRuleCount) {
             this.safe = safe;
             this.flags = flags;
             this.activeRuleCount = activeRuleCount;
@@ -52,8 +52,8 @@ public class ScanResponse {
 
         public boolean isSafe() { return safe; }
         public void setSafe(boolean safe) { this.safe = safe; }
-        public List<String> getFlags() { return flags; }
-        public void setFlags(List<String> flags) { this.flags = flags; }
+        public List<Finding> getFlags() { return flags; }
+        public void setFlags(List<Finding> flags) { this.flags = flags; }
 
         /** Number of active rules the document was actually checked against. Zero means the engine did nothing. */
         public int getActiveRuleCount() { return activeRuleCount; }
@@ -93,33 +93,33 @@ public class ScanResponse {
     /** Findings from document structure: metadata, annotations, and active content. */
     public static class DocumentStructureResult {
         private boolean safe;
-        private List<String> findings;
+        private List<Finding> findings;
 
         public DocumentStructureResult() {}
-        public DocumentStructureResult(boolean safe, List<String> findings) {
+        public DocumentStructureResult(boolean safe, List<Finding> findings) {
             this.safe = safe;
             this.findings = findings;
         }
 
         public boolean isSafe() { return safe; }
         public void setSafe(boolean safe) { this.safe = safe; }
-        public List<String> getFindings() { return findings; }
-        public void setFindings(List<String> findings) { this.findings = findings; }
+        public List<Finding> getFindings() { return findings; }
+        public void setFindings(List<Finding> findings) { this.findings = findings; }
     }
 
     public static class VisualObfuscationResult {
         private boolean safe;
-        private List<String> findings;
+        private List<Finding> findings;
 
         public VisualObfuscationResult() {}
-        public VisualObfuscationResult(boolean safe, List<String> findings) {
+        public VisualObfuscationResult(boolean safe, List<Finding> findings) {
             this.safe = safe;
             this.findings = findings;
         }
 
         public boolean isSafe() { return safe; }
         public void setSafe(boolean safe) { this.safe = safe; }
-        public List<String> getFindings() { return findings; }
-        public void setFindings(List<String> findings) { this.findings = findings; }
+        public List<Finding> getFindings() { return findings; }
+        public void setFindings(List<Finding> findings) { this.findings = findings; }
     }
 }

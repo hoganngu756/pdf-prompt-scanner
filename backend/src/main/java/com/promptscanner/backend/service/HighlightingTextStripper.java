@@ -2,6 +2,7 @@ package com.promptscanner.backend.service;
 
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import com.promptscanner.backend.dto.Finding;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.apache.pdfbox.text.TextPosition;
 
@@ -22,7 +23,7 @@ public class HighlightingTextStripper extends PDFTextStripper {
     private static final Logger log = LoggerFactory.getLogger(HighlightingTextStripper.class);
 
     private final Set<String> highlightWords;
-    private final List<String> visualObfuscationFindings = new ArrayList<>();
+    private final List<Finding> visualObfuscationFindings = new ArrayList<>();
     private final Map<Integer, List<PDRectangle>> highlightsPerPage = new HashMap<>();
     private final Map<TextPosition, float[]> characterColors = new java.util.IdentityHashMap<>();
     /** Glyphs painted with a rendering mode that draws nothing (Tr 3 / Tr 7). */
@@ -185,8 +186,10 @@ public class HighlightingTextStripper extends PDFTextStripper {
             // hidden runs would otherwise amplify a small upload into a multi-megabyte
             // body -- expensive to build, and enough to hang the browser rendering it.
             if (!trimmedText.isEmpty() && visualObfuscationFindings.size() < MAX_VISUAL_FINDINGS) {
-                visualObfuscationFindings.add(String.format("Page %d: Hidden text via %s: '%s'",
-                        getCurrentPageNo(), String.join(" + ", reasons), truncate(trimmedText)));
+                visualObfuscationFindings.add(Finding.quoting(
+                        "Hidden text via " + String.join(" + ", reasons),
+                        "Page " + getCurrentPageNo(),
+                        truncate(trimmedText)));
 
                 addHighlight(computeBoundingBox(textPositions));
             }
@@ -217,11 +220,12 @@ public class HighlightingTextStripper extends PDFTextStripper {
                         + "analysis are truncated for the remainder of the page.",
                 getCurrentPageNo(), MAX_TRACKED_GLYPHS_PER_PAGE);
         if (visualObfuscationFindings.size() < MAX_VISUAL_FINDINGS) {
-            visualObfuscationFindings.add(String.format(
-                    "Page %d: Abnormal glyph volume — over %,d text-drawing operations on a single "
-                            + "page. Analysis of this page was truncated, and content beyond that point "
+            visualObfuscationFindings.add(Finding.at(String.format(
+                    "Abnormal glyph volume — over %,d text-drawing operations on a single page. "
+                            + "Analysis of this page was truncated, and content beyond that point "
                             + "was not examined.",
-                    getCurrentPageNo(), MAX_TRACKED_GLYPHS_PER_PAGE));
+                    MAX_TRACKED_GLYPHS_PER_PAGE),
+                    "Page " + getCurrentPageNo()));
         }
     }
 
@@ -277,7 +281,7 @@ public class HighlightingTextStripper extends PDFTextStripper {
         return rect;
     }
 
-    public List<String> getVisualObfuscationFindings() {
+    public List<Finding> getVisualObfuscationFindings() {
         return visualObfuscationFindings;
     }
 

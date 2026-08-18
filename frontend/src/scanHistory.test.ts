@@ -3,7 +3,7 @@ import { loadHistory, recordScan, clearHistory } from './scanHistory';
 import { ScanResponse } from './types';
 
 const flagged: ScanResponse = {
-  visualObfuscationResult: { safe: false, findings: ['Page 1: hidden text'] },
+  visualObfuscationResult: { safe: false, findings: [{ description: 'Page 1: hidden text' }] },
   documentStructureResult: { safe: true, findings: [] },
   heuristicResult: { safe: true, flags: [], activeRuleCount: 10 },
 };

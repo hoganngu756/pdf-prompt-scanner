@@ -11,6 +11,7 @@ import org.apache.pdfbox.pdmodel.interactive.form.PDAcroForm;
 import org.apache.pdfbox.pdmodel.interactive.form.PDField;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocumentOutline;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineItem;
+import com.promptscanner.backend.dto.Finding;
 import com.promptscanner.backend.util.TextNormalizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,11 +45,11 @@ public class PdfStructureScanner {
      *                    and AI engines to analyse
      * @param findings    active-content and hidden-surface findings to show the user
      */
-    public record StructureData(String hiddenText, List<String> findings) {}
+    public record StructureData(String hiddenText, List<Finding> findings) {}
 
     public StructureData scan(PDDocument document) {
         StringBuilder recovered = new StringBuilder();
-        List<String> findings = new ArrayList<>();
+        List<Finding> findings = new ArrayList<>();
 
         collectMetadata(document, recovered, findings);
         collectActiveContent(document, findings);
@@ -59,7 +60,7 @@ public class PdfStructureScanner {
         return new StructureData(recovered.toString(), findings);
     }
 
-    private void collectMetadata(PDDocument document, StringBuilder recovered, List<String> findings) {
+    private void collectMetadata(PDDocument document, StringBuilder recovered, List<Finding> findings) {
         try {
             PDDocumentInformation info = document.getDocumentInformation();
             if (info == null) {
@@ -76,7 +77,7 @@ public class PdfStructureScanner {
         }
     }
 
-    private void appendField(StringBuilder recovered, List<String> findings, String label, String value) {
+    private void appendField(StringBuilder recovered, List<Finding> findings, String label, String value) {
         if (value == null || value.isBlank()) {
             return;
         }
@@ -84,26 +85,26 @@ public class PdfStructureScanner {
         recovered.append(label).append(": ").append(trimmed).append("\n");
         // Only surface metadata that reads like an instruction rather than a filename
         if (looksInstructional(trimmed)) {
-            findings.add(String.format("Document metadata field '%s' contains instruction-like text: '%s'",
-                    label, trimmed));
+            findings.add(Finding.quoting(
+                    "Document metadata field contains instruction-like text", label, trimmed));
         }
     }
 
-    private void collectActiveContent(PDDocument document, List<String> findings) {
+    private void collectActiveContent(PDDocument document, List<Finding> findings) {
         try {
             COSDictionary root = document.getDocumentCatalog().getCOSObject();
 
             if (root.getDictionaryObject(COSName.getPDFName("OpenAction")) != null) {
-                findings.add("Document defines an /OpenAction that runs automatically when opened.");
+                findings.add(Finding.of("Document defines an /OpenAction that runs automatically when opened."));
             }
 
             COSBase names = root.getDictionaryObject(COSName.NAMES);
             if (names instanceof COSDictionary namesDict) {
                 if (namesDict.getDictionaryObject(COSName.JAVA_SCRIPT) != null) {
-                    findings.add("Document contains embedded JavaScript (/JavaScript name tree).");
+                    findings.add(Finding.of("Document contains embedded JavaScript (/JavaScript name tree)."));
                 }
                 if (namesDict.getDictionaryObject(COSName.EMBEDDED_FILES) != null) {
-                    findings.add("Document contains embedded file attachments (/EmbeddedFiles).");
+                    findings.add(Finding.of("Document contains embedded file attachments (/EmbeddedFiles)."));
                 }
             }
 
@@ -115,7 +116,7 @@ public class PdfStructureScanner {
         }
     }
 
-    private void collectAnnotations(PDDocument document, StringBuilder recovered, List<String> findings) {
+    private void collectAnnotations(PDDocument document, StringBuilder recovered, List<Finding> findings) {
         int seen = 0;
         try {
             for (PDPage page : document.getPages()) {
@@ -138,7 +139,8 @@ public class PdfStructureScanner {
                         // review comments are common and shouldn't flag a document.
                         recovered.append("Annotation: ").append(trimmed).append("\n");
                         if (looksInstructional(trimmed)) {
-                            findings.add(String.format("Annotation (%s) carries instruction-like text not shown in the page body: '%s'",
+                            findings.add(Finding.quoting(
+                                    "Annotation carries instruction-like text not shown in the page body",
                                     annotation.getSubtype(), trimmed));
                         }
                     }
@@ -150,7 +152,7 @@ public class PdfStructureScanner {
         }
     }
 
-    private void describeAction(PDAnnotation annotation, List<String> findings) {
+    private void describeAction(PDAnnotation annotation, List<Finding> findings) {
         try {
             COSBase actionBase = annotation.getCOSObject().getDictionaryObject(COSName.A);
             if (!(actionBase instanceof COSDictionary actionDict)) {
@@ -161,12 +163,15 @@ public class PdfStructureScanner {
                 return;
             }
             switch (subtype) {
-                case "JavaScript" -> findings.add("Annotation triggers embedded JavaScript when activated.");
-                case "Launch" -> findings.add("Annotation defines a /Launch action that opens an external program.");
+                case "JavaScript" -> findings.add(
+                        Finding.of("Annotation triggers embedded JavaScript when activated."));
+                case "Launch" -> findings.add(
+                        Finding.of("Annotation defines a /Launch action that opens an external program."));
                 case "URI" -> {
                     String uri = actionDict.getString(COSName.URI);
                     if (uri != null && !uri.isBlank()) {
-                        findings.add("Annotation links to external URI: " + truncate(uri.trim()));
+                        findings.add(Finding.quoting(
+                                "Annotation links to an external URI", truncate(uri.trim())));
                     }
                 }
                 default -> { /* ordinary navigation actions are unremarkable */ }
@@ -180,7 +185,7 @@ public class PdfStructureScanner {
      * Form field values are extractable text that never appears in the page
      * content stream, making a filled field another place to park an injection.
      */
-    private void collectFormFieldValues(PDDocument document, StringBuilder recovered, List<String> findings) {
+    private void collectFormFieldValues(PDDocument document, StringBuilder recovered, List<Finding> findings) {
         try {
             PDAcroForm form = document.getDocumentCatalog().getAcroForm(null);
             if (form == null) {
@@ -203,7 +208,7 @@ public class PdfStructureScanner {
                 String trimmed = truncate(value.trim());
                 recovered.append("Form field '").append(field.getPartialName()).append("': ").append(trimmed).append("\n");
                 if (looksInstructional(trimmed)) {
-                    findings.add(String.format("Form field '%s' contains instruction-like text: '%s'",
+                    findings.add(Finding.quoting("Form field contains instruction-like text",
                             field.getPartialName(), trimmed));
                 }
             }
@@ -212,7 +217,7 @@ public class PdfStructureScanner {
         }
     }
 
-    private void collectOutline(PDDocument document, StringBuilder recovered, List<String> findings) {
+    private void collectOutline(PDDocument document, StringBuilder recovered, List<Finding> findings) {
         try {
             PDDocumentOutline outline = document.getDocumentCatalog().getDocumentOutline();
             if (outline == null) {
@@ -228,7 +233,7 @@ public class PdfStructureScanner {
                     String trimmed = truncate(title.trim());
                     recovered.append("Bookmark: ").append(trimmed).append("\n");
                     if (looksInstructional(trimmed)) {
-                        findings.add("Bookmark contains instruction-like text: '" + trimmed + "'");
+                        findings.add(Finding.quoting("Bookmark contains instruction-like text", trimmed));
                     }
                 }
             }
