@@ -1,25 +1,31 @@
-# Stage 1: Build the Spring Boot Application
+# Stage 1: build the Spring Boot application
 FROM maven:3.9.6-eclipse-temurin-21 AS build
 WORKDIR /app
-COPY pom.xml .
-COPY src ./src
-RUN mvn clean package -DskipTests
 
-# Stage 2: Create runtime environment with Tesseract
+# Dependencies resolve in their own layer, so a source-only change does not
+# re-download the world on every image build.
+COPY pom.xml .
+RUN mvn -B dependency:go-offline
+
+COPY src ./src
+RUN mvn -B clean package -DskipTests
+
+# Stage 2: runtime with Tesseract for the OCR fallback
 FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
 
-# Install Tesseract OCR and language data
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-eng \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy built JAR from Stage 1
-COPY --from=build /app/target/backend-0.0.1-SNAPSHOT.jar app.jar
+# The service parses hostile PDFs by design, so the process that does it should
+# not be root. It writes nothing outside the JVM's temp dir.
+RUN useradd --system --create-home --shell /usr/sbin/nologin scanner
 
-# Expose backend port
+# Wildcard so a version bump in pom.xml doesn't silently break the copy.
+COPY --from=build /app/target/backend-*.jar app.jar
+
+USER scanner
 EXPOSE 8080
-
-# Run Spring Boot app
 ENTRYPOINT ["java", "-jar", "app.jar"]
