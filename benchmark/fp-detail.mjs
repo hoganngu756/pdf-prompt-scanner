@@ -7,8 +7,8 @@ for (const f of readdirSync(`${process.env.CORPUS ?? 'corpus'}/benign`).filter(x
   form.append('useLLM', 'false'); form.append('useHeuristics', 'true');
   const r = await (await fetch(`${BASE}/scan`, { method: 'POST', body: form })).json();
   for (const flag of r.heuristicResult?.flags ?? []) {
-    const m = flag.match(/matching: '([^']+)'/);
-    if (m) counts[m[1]] = (counts[m[1]] ?? 0) + 1;
+    // The matched rule is a structured field now, not prose to parse back out.
+    if (flag.quote) counts[flag.quote] = (counts[flag.quote] ?? 0) + 1;
   }
 }
 console.log('\nRules firing on BENIGN documents (out of 75):');

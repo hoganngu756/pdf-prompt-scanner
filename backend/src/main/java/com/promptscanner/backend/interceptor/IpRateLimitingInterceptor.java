@@ -8,8 +8,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
+import java.util.Comparator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Component
 public class IpRateLimitingInterceptor implements HandlerInterceptor {
@@ -39,6 +41,18 @@ public class IpRateLimitingInterceptor implements HandlerInterceptor {
     /** Drop a bucket once it has been full and idle for this long. */
     private static final long BUCKET_TTL_MS = 10 * 60 * 1000L;
     private static final int MAX_TRACKED_CLIENTS = 50_000;
+
+    /** Once over the ceiling, evict down to this so the sweep isn't re-triggered at once. */
+    private static final int EVICT_DOWN_TO = 40_000;
+
+    /**
+     * Sweeping is O(n) over the bucket map, so it must not run per request -- that
+     * turns a flood of distinct addresses into quadratic work on the very path
+     * that is supposed to shed load.
+     */
+    private static final long SWEEP_INTERVAL_MS = 30_000L;
+
+    private final AtomicLong lastSweepAt = new AtomicLong(0);
 
     private final Map<String, TokenBucket> buckets = new ConcurrentHashMap<>();
 
@@ -105,15 +119,43 @@ public class IpRateLimitingInterceptor implements HandlerInterceptor {
     /**
      * Without eviction the map grows once per distinct client address forever,
      * which is itself a memory-exhaustion vector.
+     *
+     * What this must never do is drop buckets that still hold spent tokens. An
+     * earlier version called clear() at the ceiling, which made the limiter
+     * self-defeating: flooding the map with distinct source addresses wiped every
+     * counter, so an attacker could reset their own budget on demand and cost
+     * everyone else their protection at the same time.
      */
     private void evictStaleBuckets() {
-        if (buckets.size() < MAX_TRACKED_CLIENTS) {
-            long now = System.currentTimeMillis();
-            buckets.values().removeIf(b -> b.isIdleSince(now, BUCKET_TTL_MS));
+        long now = System.currentTimeMillis();
+        long last = lastSweepAt.get();
+        if (now - last < SWEEP_INTERVAL_MS) {
             return;
         }
-        log.warn("Rate limiter tracking {} clients; clearing state to bound memory.", buckets.size());
-        buckets.clear();
+        // Whoever wins the CAS does this sweep; everyone else carries on serving.
+        if (!lastSweepAt.compareAndSet(last, now)) {
+            return;
+        }
+
+        // Idle means fully refilled and untouched, so forgetting these changes
+        // nobody's effective limit.
+        buckets.values().removeIf(b -> b.isIdleSince(now, BUCKET_TTL_MS));
+
+        int size = buckets.size();
+        if (size < MAX_TRACKED_CLIENTS) {
+            return;
+        }
+
+        // Still over the ceiling with nothing idle to reclaim. Drop the least
+        // recently seen rather than everything: a flooder's own buckets are the
+        // most recently seen, so this is the one policy they cannot use to clear
+        // their own record.
+        log.warn("Rate limiter tracking {} clients; evicting least-recently-seen down to {}.",
+                size, EVICT_DOWN_TO);
+        buckets.entrySet().stream()
+                .sorted(Comparator.comparingLong(e -> e.getValue().lastSeen()))
+                .limit((long) size - EVICT_DOWN_TO)
+                .forEach(e -> buckets.remove(e.getKey(), e.getValue()));
     }
 
     private static class TokenBucket {
@@ -136,6 +178,10 @@ public class IpRateLimitingInterceptor implements HandlerInterceptor {
                 return true;
             }
             return false;
+        }
+
+        synchronized long lastSeen() {
+            return lastRefillTime;
         }
 
         /** Idle means fully refilled and untouched, so forgetting it changes nothing. */

@@ -100,9 +100,12 @@ export default function ExamplePdfs({ onSelectSample }: ExamplePdfsProps) {
           <div key={sample.filename} className="sample-row">
             <span className="sample-name">{sample.label}</span>
             <span className="sample-actions">
-              <span className={`status is-${sample.safe ? 'safe' : 'danger'}`}>
-                {sample.safe ? 'Clean' : 'Malicious'}
-              </span>
+              {/* Nine of ten samples are payloads, so "malicious" is the norm here
+                  and carries almost no signal — colouring all nine red would be
+                  chroma without meaning. The control case is the informative one. */}
+              {sample.safe
+                ? <span className="status is-safe">Clean</span>
+                : <span className="chip">Malicious</span>}
               <button className="btn-secondary" onClick={() => handleTrySample(sample)}>
                 Scan
               </button>

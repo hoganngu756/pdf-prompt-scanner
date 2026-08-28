@@ -6,12 +6,14 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.not;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -20,6 +22,46 @@ class ScanControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    /**
+     * Pins the wire shape of a finding. Our prose and text recovered from the
+     * document travel in separate fields, so a crafted PDF cannot supply content
+     * that reads as the scanner's own framing — and the client can set quoted
+     * material apart typographically. Fusing them back into one string is a
+     * regression this test exists to catch.
+     */
+    @Test
+    void scanResponse_KeepsOurProseSeparateFromRecoveredText() throws Exception {
+        byte[] pdf = new ClassPathResource("pdf/injected.pdf").getContentAsByteArray();
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "injected.pdf", "application/pdf", pdf);
+
+        mockMvc.perform(multipart("/api/scan").file(file)
+                        .param("useLLM", "false")
+                        .param("useHeuristics", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.heuristicResult.safe").value(false))
+                .andExpect(jsonPath("$.heuristicResult.flags[0].description").exists())
+                .andExpect(jsonPath("$.heuristicResult.flags[0].quote")
+                        .value("ignore all previous instructions"))
+                // The matched phrase must not also be embedded in our sentence.
+                .andExpect(jsonPath("$.heuristicResult.flags[0].description",
+                        not(containsString("ignore all previous instructions"))));
+    }
+
+    @Test
+    void scanResponse_OmitsEmptyFindingFieldsRatherThanSendingNulls() throws Exception {
+        byte[] pdf = new ClassPathResource("pdf/safe.pdf").getContentAsByteArray();
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "safe.pdf", "application/pdf", pdf);
+
+        mockMvc.perform(multipart("/api/scan").file(file)
+                        .param("useLLM", "false")
+                        .param("useHeuristics", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.heuristicResult.safe").value(true))
+                .andExpect(jsonPath("$.visualObfuscationResult.safe").value(true));
+    }
 
     @Test
     void getRules_IsPublicAndReturnsTheConfiguredSet() throws Exception {

@@ -391,7 +391,10 @@ header h1.main-logo {
 .btn-primary:disabled {
   background: var(--surface-sunken);
   border-color: var(--rule);
-  color: var(--ink-faint);
+  /* WCAG exempts disabled controls, but this is the primary action in its resting
+     state on first load. The flat fill, border and cursor already say "disabled";
+     unreadable text (2.30:1) only said "broken". */
+  color: var(--control-border);
   cursor: not-allowed;
 }
 
@@ -698,9 +701,12 @@ header h1.main-logo {
 .carousel-indicator-dot {
   display: flex;
   align-items: center;
+  justify-content: center;
   border: none;
   background: none;
   padding: var(--s-2);
+  min-width: 24px;
+  min-height: 24px;
   cursor: pointer;
 }
 
