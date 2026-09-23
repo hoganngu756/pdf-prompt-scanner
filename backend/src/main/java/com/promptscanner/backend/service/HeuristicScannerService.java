@@ -24,7 +24,7 @@ public class HeuristicScannerService {
 
     /**
      * Compiling every rule on every scan is pure repeated work. The rule set is
-     * now fixed at boot, so this cache is filled once and never invalidated.
+     * fixed at boot, so this cache is filled once and never invalidated.
      */
     private final Map<String, Pattern> patternCache = new ConcurrentHashMap<>();
 
@@ -43,8 +43,8 @@ public class HeuristicScannerService {
      * Builds a regex pattern that tolerates whitespace and punctuation injection between characters.
      * Example: "bypass" matches "b y p a s s", "b.y.p.a.s.s", "b_y_p_a_s_s"
      *
-     * The pattern is anchored at the start of a word, so a phrase can no longer match from
-     * the middle of a longer word: "act as a" no longer fires on "react as a whole".
+     * The pattern is anchored at the start of a word, so a phrase cannot match from
+     * the middle of a longer word: "act as a" does not fire on "react as a whole".
      *
      * Deliberately not anchored at the end. Trailing inflections usually carry the same
      * intent ("system prompt" should still catch "system prompts"), and for a security
@@ -115,7 +115,7 @@ public class HeuristicScannerService {
                             rule.getPhrase()));
                 }
             } catch (PatternSyntaxException e) {
-                // A bad regex is now a config error caught at boot, but stay resilient
+                // A bad regex is a config error caught at boot, but stay resilient
                 log.warn("Skipped invalid regex rule '{}': {}", rule.getPhrase(), e.getMessage());
             }
         }

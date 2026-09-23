@@ -7,8 +7,8 @@ import com.fasterxml.jackson.annotation.JsonInclude;
  *
  * The parts are kept apart because only {@code description} is ours. {@code
  * location} and {@code quote} are recovered from the uploaded document and are
- * therefore attacker-controlled. Concatenating them into one sentence — as this
- * used to do — has two costs: a crafted PDF can supply metadata that reads as the
+ * therefore attacker-controlled. Concatenating them into one sentence would have
+ * two costs: a crafted PDF can supply metadata that reads as the
  * scanner's own framing and so forge a plausible-looking finding, and the client
  * is left unable to set quoted material apart from our prose, which is the one
  * typographic rule this product actually depends on.

@@ -25,8 +25,7 @@ import java.util.Map;
  * Turns flagged pages into highlighted PNG previews.
  *
  * Split out of PdfScannerService so that rendering — which is pure geometry and
- * image work — can be reasoned about and tested without text extraction, OCR, or
- * any repository standing behind it.
+ * image work — can be reasoned about and tested without text extraction or OCR.
  */
 @Service
 public class PdfPreviewRenderer {

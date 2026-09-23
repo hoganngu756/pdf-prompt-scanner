@@ -7,9 +7,8 @@ import { api } from '../api';
  * Read-only view of the detection rule set.
  *
  * Rules are configuration (backend/src/main/resources/heuristic-rules.yml), not
- * runtime state. Editing them here would require an admin credential, which was
- * the source of most of this project's security issues; a reviewable diff is a
- * better change mechanism for a security tool anyway.
+ * runtime state, so a change is a reviewable diff and the API has no write path
+ * or credential to protect.
  */
 export default function RulesManager() {
   const [rules, setRules] = useState<HeuristicRule[]>([]);

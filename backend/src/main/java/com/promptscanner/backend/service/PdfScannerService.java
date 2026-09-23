@@ -15,7 +15,6 @@ import jakarta.annotation.PostConstruct;
 
 import java.awt.image.BufferedImage;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -24,9 +23,8 @@ import java.util.Set;
  * Extracts everything analysable from an uploaded PDF: page text, OCR of embedded
  * images, hidden-surface content, and highlighted page previews.
  *
- * Note what this class does NOT do: it holds no repository and knows nothing
- * about heuristic rules. The words to highlight are passed in by the caller, so
- * extraction can be exercised without a database behind it.
+ * This class knows nothing about heuristic rules: the words to highlight are
+ * passed in by the caller, so extraction can be tested in isolation.
  */
 @Service
 public class PdfScannerService {
@@ -214,10 +212,5 @@ public class PdfScannerService {
             words.addAll(List.of("ignore", "previous", "instructions", "system", "message", "prompt", "bypass"));
         }
         return words;
-    }
-
-    /** Kept for callers that have no rule context. */
-    public PdfData processPdf(MultipartFile file) throws IOException {
-        return processPdf(file, highlightWordsFrom(new ArrayList<>()));
     }
 }

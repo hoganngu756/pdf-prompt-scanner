@@ -9,11 +9,8 @@ import java.util.List;
 /**
  * The detection rule set, bound from heuristic-rules.yml.
  *
- * Rules used to live in a SQLite table edited through an authenticated admin
- * panel. That put the scanner's detection content in an unversioned, unbacked-up
- * database, and required an auth surface that turned out to be the source of
- * most of this project's security issues. As configuration, a rule change is a
- * reviewable diff instead.
+ * Rules are configuration rather than runtime state: a change to what the
+ * scanner detects is a reviewable diff, and there is no write path to protect.
  */
 @Component
 @ConfigurationProperties(prefix = "app.heuristics")

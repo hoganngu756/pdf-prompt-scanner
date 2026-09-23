@@ -56,7 +56,7 @@ describe('api client', () => {
 
     const init = spy.mock.calls[0][1] as RequestInit;
     const headers = (init?.headers ?? {}) as Record<string, string>;
-    expect(Object.keys(headers)).not.toContain('X-Admin-Api-Key');
+    expect(Object.keys(headers)).toHaveLength(0);
   });
 
   it('sends scan uploads as multipart without forcing a Content-Type', async () => {

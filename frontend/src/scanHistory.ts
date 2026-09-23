@@ -17,11 +17,9 @@ export interface HistoryEntry {
 /**
  * Scan history, kept in the visitor's own browser.
  *
- * The server used to store every scan — filenames, flagged excerpts and AI
- * analyses of documents other people uploaded — behind an admin key. Keeping it
- * client-side means each person sees only their own scans, nothing is shared,
- * no credential is needed, and no record of anyone's document ever reaches the
- * server. It also survives redeploys, which the server-side table did not.
+ * Keeping it client-side means each person sees only their own scans, nothing
+ * is shared, no credential is needed, and no record of anyone's document is
+ * stored on the server. It also survives backend redeploys.
  */
 export function loadHistory(): HistoryEntry[] {
   try {

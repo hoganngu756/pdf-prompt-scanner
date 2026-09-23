@@ -4,8 +4,8 @@ import { HeuristicRule, ScanResponse } from './types';
 /**
  * The single place the frontend talks to the backend.
  *
- * The API is now entirely public and read-only apart from submitting a scan, so
- * there are no credentials to attach and no auth failures to branch on.
+ * The API is public and read-only apart from submitting a scan, so there are no
+ * credentials to attach and no auth failures to branch on.
  */
 
 /** An error carrying the HTTP status so callers can report it precisely. */

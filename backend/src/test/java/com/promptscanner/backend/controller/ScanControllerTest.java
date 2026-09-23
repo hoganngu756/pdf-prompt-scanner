@@ -74,12 +74,12 @@ class ScanControllerTest {
 
     @Test
     void rulesAreReadOnly_WriteMethodsAreNotExposed() throws Exception {
-        // No admin credential exists any more, so there must be no way to mutate
-        // the rule set over HTTP at all -- not merely a guarded one.
+        // Rules are configuration: there must be no way to mutate them over HTTP
+        // at all -- not merely a guarded one.
         // /api/rules exists but only answers GET -> 405
         mockMvc.perform(post("/api/rules").contentType("application/json").content("{\"phrase\":\"x\"}"))
                 .andExpect(status().isMethodNotAllowed());
-        // /api/rules/{id} has no mapping at all any more -> 404
+        // /api/rules/{id} has no mapping at all -> 404
         mockMvc.perform(put("/api/rules/1").contentType("application/json").content("{\"phrase\":\"x\"}"))
                 .andExpect(status().isNotFound());
         mockMvc.perform(delete("/api/rules/1"))
@@ -87,7 +87,7 @@ class ScanControllerTest {
     }
 
     @Test
-    void historyEndpointNoLongerExists() throws Exception {
+    void noServerSideHistoryEndpoint() throws Exception {
         // Scan records are kept in the visitor's browser; the server stores nothing.
         mockMvc.perform(get("/api/history")).andExpect(status().isNotFound());
     }

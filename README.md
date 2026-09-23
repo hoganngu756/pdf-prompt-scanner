@@ -1,5 +1,7 @@
 # PDF Prompt Scanner
 
+[![CI](https://github.com/hoganngu756/pdf-prompt-scanner/actions/workflows/ci.yml/badge.svg)](https://github.com/hoganngu756/pdf-prompt-scanner/actions/workflows/ci.yml)
+
 **Live Deployment**: [pdf-prompt-scanner.vercel.app](https://pdf-prompt-scanner.vercel.app)
 *(The backend is on Render's free tier — the first scan may take up to 50 seconds while the server wakes up.)*
 
@@ -96,14 +98,16 @@ To regenerate the sample PDFs: `node scripts/generate-samples.mjs`
 
 **Backend (Render)** — the multi-stage `Dockerfile` packages Spring Boot with Tesseract OCR; Render detects it automatically. Set `GEMINI_API_KEY` in the service environment.
 
-The service is stateless, so Render's lack of a persistent disk no longer matters: there is nothing to lose on redeploy.
+The service is stateless, so it needs no persistent disk: there is nothing to lose on redeploy.
 
 ---
 
 ## Testing
 
 ```bash
-cd backend  && ./mvnw test    # 31 tests
-cd frontend && npm test       # 21 tests
+cd backend  && ./mvnw test    # 58 tests
+cd frontend && npm test       # 37 tests
 cd frontend && npm run build
 ```
+
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the backend tests and package, plus the frontend typecheck, tests and build, on every push to `main` and every pull request.

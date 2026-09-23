@@ -13,8 +13,7 @@ import java.util.List;
  * Read-only view of the detection rule set.
  *
  * Rules are configuration (heuristic-rules.yml), not runtime state, so there is
- * nothing to create, update or delete over HTTP -- and consequently no admin
- * credential to protect, leak, or fail open.
+ * nothing to create, update or delete over HTTP and no credential to protect.
  */
 @RestController
 @RequestMapping("/api")

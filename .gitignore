@@ -1,22 +1,13 @@
 # ===== Secrets & local configuration =====
-# Never commit these. application-secrets.properties holds the Gemini and admin
-# API keys; .env holds the frontend's backend URL and any local overrides.
+# Never commit these. application-secrets.properties holds the Gemini API key; .env holds the frontend's backend URL and any local overrides.
 backend/src/main/resources/application-secrets.properties
 backend/application-secrets.properties
 .env
 .env.*
 !.env.example
 
-# Local agent tooling. Kept out of the repo because these files describe where
-# the scanner is weak, which is not something a public repo should hand out.
+# Local agent tooling.
 .claude/
-
-# ===== Local data =====
-# SQLite database plus the journal/WAL sidecars it creates while running.
-*.db
-*.db-journal
-*.db-wal
-*.db-shm
 
 # ===== Java / Maven =====
 backend/target/
@@ -53,10 +44,6 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 desktop.ini
-
-# ===== CI =====
-# Kept local rather than committed.
-.github/workflows/
 
 # ===== Local scratch =====
 # Ad-hoc PDFs dropped in backend/ while testing. Note this is anchored to

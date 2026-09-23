@@ -23,7 +23,7 @@ public class IpRateLimitingInterceptor implements HandlerInterceptor {
     private int rateLimitRpm;
 
     /**
-     * Cheap reads and rule edits share a separate, roomier budget -- browsing the
+     * Cheap reads share a separate, roomier budget -- browsing the
      * tabs issues several requests and must not burn the scan allowance.
      */
     @Value("${app.api.rate-limit-rpm:120}")
