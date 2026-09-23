@@ -24,7 +24,7 @@ export default function HistoryTable({ history, onClear }: HistoryTableProps) {
         </div>
       ) : (
         <>
-          <div className="section-head">
+          <div className="section-head is-flush">
             <h3 className="eyebrow">This browser</h3>
             <button className="btn-secondary" onClick={onClear}>
               <Trash2 size={13} /> Clear history

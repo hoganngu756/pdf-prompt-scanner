@@ -246,7 +246,11 @@ header h1.main-logo {
 }
 
 .rail { display: flex; flex-direction: column; gap: var(--s-6); }
-.work { display: flex; flex-direction: column; gap: var(--s-10); min-width: 0; }
+.work { display: flex; flex-direction: column; gap: var(--s-8); min-width: 0; }
+
+/* Before the first scan the empty state is the intro to the samples beneath it,
+   not a section of its own — no rule, no padding block. */
+.work > .empty-state { padding: 0; border-top: none; }
 
 /* ===== Upload rail ===== */
 .upload-section { display: flex; flex-direction: column; gap: var(--s-5); }
@@ -330,7 +334,7 @@ header h1.main-logo {
   padding: var(--s-2) 0;
 }
 
-.toggle-label.is-always-on { cursor: default; color: var(--ink-muted); }
+.settings-always { margin-top: var(--s-2); }
 
 .toggle-label input[type='checkbox'] {
   appearance: none;
@@ -360,12 +364,6 @@ header h1.main-logo {
   transform: rotate(45deg);
 }
 
-.option-note {
-  font-size: var(--t-micro);
-  /* Load-bearing: it's the only explanation of why these checks have no toggle. */
-  color: var(--ink-muted);
-  font-weight: 500;
-}
 
 /* ===== Buttons ===== */
 .btn-primary {
@@ -417,7 +415,6 @@ header h1.main-logo {
 
 .btn-secondary:hover { background: var(--surface-hover); color: var(--ink); }
 
-.upload-hint { font-size: var(--t-micro); color: var(--ink-muted); }
 
 /* ===== Verdict — the one elevated element in the app ===== */
 .verdict {
@@ -496,6 +493,9 @@ header h1.main-logo {
   margin-bottom: var(--s-1);
 }
 
+/* Sits directly on a bordered table, whose own top edge is the divider. */
+.section-head.is-flush { border-bottom: none; margin-bottom: 0; }
+
 .check-list { display: flex; flex-direction: column; }
 
 .check {
@@ -528,7 +528,7 @@ header h1.main-logo {
   grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
-  gap: var(--s-2);
+  gap: var(--s-4);
   list-style: none;
 }
 
@@ -542,10 +542,10 @@ header h1.main-logo {
   font-size: var(--t-small);
   line-height: 1.55;
   color: var(--ink-secondary);
-  background: var(--surface-sunken);
+  /* A left rule, not a filled box: ten grey blocks stacked read as clutter, and
+     the rule alone is enough to mark the block as a finding. */
   border-left: 2px solid var(--rule-strong);
-  border-radius: 0 var(--r-sm) var(--r-sm) 0;
-  padding: var(--s-3) var(--s-4);
+  padding: var(--s-1) 0 var(--s-1) var(--s-4);
 }
 
 .evidence-description { color: var(--ink); font-weight: 500; }
@@ -621,24 +621,6 @@ header h1.main-logo {
 .status.is-safe   { color: var(--safe); }
 .status.is-warn   { color: var(--warn); }
 
-/* Neutral metadata chip — deliberately not a status colour */
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s-1);
-  font-size: var(--t-eyebrow);
-  font-weight: 560;
-  letter-spacing: 0.03em;
-  padding: 2px var(--s-2);
-  border-radius: var(--r-sm);
-  border: 1px solid var(--rule);
-  background: var(--surface-sunken);
-  color: var(--ink-muted);
-  white-space: nowrap;
-}
-
-.chip.is-mono { font-family: var(--font-mono); letter-spacing: 0; }
-
 /* ===== Preview ===== */
 .preview { display: flex; flex-direction: column; gap: var(--s-3); }
 
@@ -655,12 +637,9 @@ header h1.main-logo {
   color: var(--ink-muted);
 }
 
+/* No frame around the frame: the page image carries its own border. */
 .preview-frame {
   position: relative;
-  border: 1px solid var(--rule);
-  border-radius: var(--r-md);
-  background: var(--surface-sunken);
-  padding: var(--s-4);
   display: flex;
   justify-content: center;
 }
@@ -784,9 +763,30 @@ header h1.main-logo {
 .animate-spin { animation: spin 0.8s linear infinite; }
 
 /* ===== Explainer ===== */
-.explainer { display: flex; flex-direction: column; gap: var(--s-5); }
+.explainer-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--t-small);
+  font-weight: 500;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  list-style: none;
+  transition: color 0.12s;
+}
 
-.explainer-lede { font-size: var(--t-body); color: var(--ink-secondary); max-width: 68ch; }
+.explainer-toggle::-webkit-details-marker { display: none; }
+.explainer-toggle:hover { color: var(--ink); }
+
+.explainer-chevron { color: var(--ink-muted); transition: transform 0.15s; }
+.explainer[open] .explainer-chevron { transform: rotate(90deg); }
+
+.explainer-lede {
+  margin: var(--s-4) 0 var(--s-5);
+  font-size: var(--t-body);
+  color: var(--ink-secondary);
+  max-width: 68ch;
+}
 
 /* Definition list, not a grid of cards */
 .attack-list {
@@ -824,31 +824,42 @@ header h1.main-logo {
   color: var(--ink-secondary);
 }
 
-/* ===== Sample documents: a list, not a card grid ===== */
-.sample-list {
-  border: 1px solid var(--rule);
-  border-radius: var(--r-lg);
-  overflow: hidden;
-  background: var(--surface);
-}
+/* ===== Sample documents: rows divided by rules, one action each ===== */
+.sample-list { list-style: none; }
 
 .sample-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--s-2) var(--s-4);
+  display: flex;
   align-items: center;
-  padding: var(--s-4) var(--s-5);
+  gap: var(--s-2);
   border-bottom: 1px solid var(--rule-faint);
-  transition: background 0.12s;
 }
 
 .sample-row:last-child { border-bottom: none; }
-.sample-row:hover { background: var(--n-25); }
+
+/* The whole row is the scan action: name, what it hides, and a quiet affordance. */
+.sample-scan {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 1fr) auto;
+  gap: var(--s-1) var(--s-4);
+  align-items: baseline;
+  padding: var(--s-3) var(--s-2);
+  background: none;
+  border: none;
+  border-radius: var(--r-sm);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.sample-scan:hover { background: var(--surface-hover); }
 
 .sample-name {
   display: flex;
   align-items: center;
-  gap: var(--s-3);
+  gap: var(--s-2);
   font-size: var(--t-small);
   font-weight: 560;
   color: var(--ink);
@@ -856,14 +867,23 @@ header h1.main-logo {
 }
 
 .sample-desc {
-  grid-column: 1 / -1;
   font-size: var(--t-micro);
   color: var(--ink-muted);
   line-height: 1.55;
-  max-width: 72ch;
 }
 
-.sample-actions { display: flex; align-items: center; gap: var(--s-2); }
+.sample-go {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  font-size: var(--t-micro);
+  font-weight: 500;
+  color: var(--ink-muted);
+  transition: color 0.12s;
+}
+
+.sample-scan:hover .sample-go,
+.sample-scan:focus-visible .sample-go { color: var(--ink); }
 
 .icon-btn {
   background: none;
@@ -903,7 +923,7 @@ th {
 }
 
 td {
-  padding: var(--s-4) var(--s-5);
+  padding: var(--s-3) var(--s-5);
   border-bottom: 1px solid var(--rule-faint);
   font-size: var(--t-small);
   color: var(--ink-secondary);
@@ -974,6 +994,10 @@ tbody tr:hover td { background: var(--n-25); }
   .verdict-headline { font-size: var(--t-h1); }
   .verdict { flex-direction: column; gap: var(--s-3); }
   .check { grid-template-columns: minmax(0, 1fr); }
+  /* Name over description; the affordance stays pinned right of the name. */
+  .sample-scan { grid-template-columns: minmax(0, 1fr) auto; }
+  .sample-desc { grid-column: 1 / -1; grid-row: 2; }
+  .page-header { margin-bottom: var(--s-6); }
 }
 
 @media (prefers-reduced-motion: reduce) {

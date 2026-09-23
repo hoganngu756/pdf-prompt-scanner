@@ -81,38 +81,12 @@ export default function UploadSection({
       <div className="settings-group">
         <h4 className="settings-group-title">Checks</h4>
 
-        {/* Always runs server-side, so it is shown as a fixed row rather than a
-            toggle — otherwise its result looks like it came from nowhere. */}
-        <div className="settings-option">
-          <div className="toggle-label is-always-on">
-            Visual obfuscation
-            <span className="option-note">always</span>
-          </div>
-          <p className="option-desc">
-            Invisible rendering mode, transparent fill, white-on-white text and fonts under 3pt.
-          </p>
-        </div>
-
-        <div className="settings-option">
-          <div className="toggle-label is-always-on">
-            Document structure
-            <span className="option-note">always</span>
-          </div>
-          <p className="option-desc">
-            Metadata, annotations, bookmarks and form fields, plus embedded JavaScript and
-            auto-run actions.
-          </p>
-        </div>
-
         <div className="settings-option">
           <label className="toggle-label">
             <input type="checkbox" checked={useHeuristics} onChange={(e) => setUseHeuristics(e.target.checked)} />
             Heuristic rules
           </label>
-          <p className="option-desc">
-            Literal and regex patterns from your rule set, tolerant of spacing, punctuation
-            and lookalike characters.
-          </p>
+          <p className="option-desc">Known phrases and patterns, tolerant of lookalike characters.</p>
         </div>
 
         <div className="settings-option">
@@ -120,11 +94,14 @@ export default function UploadSection({
             <input type="checkbox" checked={useLLM} onChange={(e) => setUseLLM(e.target.checked)} />
             AI context analysis
           </label>
-          <p className="option-desc">
-            Gemini reads the extracted text and judges intent, catching novel injections no
-            static rule covers.
-          </p>
+          <p className="option-desc">Gemini judges intent, catching injections no rule covers.</p>
         </div>
+
+        {/* These two run server-side on every scan. Named here, as one line rather
+            than two disabled rows, so their results don't appear from nowhere. */}
+        <p className="option-desc settings-always">
+          Visual obfuscation and document structure checks always run.
+        </p>
       </div>
 
       <button className="btn-primary" onClick={handleScan} disabled={!file || loading}>
@@ -132,8 +109,6 @@ export default function UploadSection({
           ? <><Loader2 className="animate-spin" size={15} /> Scanning…</>
           : <><ScanSearch size={15} /> Run scan</>}
       </button>
-
-      <p className="upload-hint">First scan may take ~60s while the backend wakes up.</p>
     </section>
   );
 }

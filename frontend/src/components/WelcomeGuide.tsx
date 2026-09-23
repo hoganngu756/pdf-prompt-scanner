@@ -1,14 +1,17 @@
+import { ChevronRight } from 'lucide-react';
+
 /**
- * Compressed from a full explainer to a short definition plus a reference list.
- * The previous version ran to roughly 1,600px of brochure copy above the tool's
- * own output, which buried the thing people came to use.
+ * Reference material, not the task. Collapsed by default so the empty scan view
+ * leads with one thing — samples to try — and opens on demand for anyone who wants
+ * the definition. Native <details> gives keyboard and screen-reader support free.
  */
 export default function WelcomeGuide() {
   return (
-    <section className="explainer">
-      <div className="section-head">
-        <h3 className="eyebrow">What this looks for</h3>
-      </div>
+    <details className="explainer">
+      <summary className="explainer-toggle">
+        <ChevronRight size={14} className="explainer-chevron" aria-hidden="true" />
+        What counts as prompt injection?
+      </summary>
 
       <p className="explainer-lede">
         Prompt injection hides instructions inside a document so that an AI reading it
@@ -43,6 +46,6 @@ export default function WelcomeGuide() {
           <dd>Cyrillic or Greek letters standing in for Latin ones to slip past text rules.</dd>
         </div>
       </dl>
-    </section>
+    </details>
   );
 }

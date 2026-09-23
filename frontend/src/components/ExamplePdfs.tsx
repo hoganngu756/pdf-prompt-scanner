@@ -1,4 +1,4 @@
-import { Download } from 'lucide-react';
+import { ArrowRight, Download } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 interface SamplePdf {
@@ -12,31 +12,31 @@ const SAMPLES: SamplePdf[] = [
   {
     filename: 'sample_ignore_instructions.pdf',
     label: 'Instruction override',
-    description: 'Company policy document with a hidden "ignore all previous instructions" payload.',
+    description: 'Policy document hiding "ignore all previous instructions".',
     safe: false,
   },
   {
     filename: 'sample_role_hijack.pdf',
     label: 'Role hijacking',
-    description: 'Financial report carrying a "you are now DAN" persona swap.',
+    description: 'Financial report with a "you are now DAN" persona swap.',
     safe: false,
   },
   {
     filename: 'sample_data_exfil.pdf',
     label: 'Data exfiltration',
-    description: 'Meeting notes instructing the model to append context to an external URL.',
+    description: 'Meeting notes telling the model to send context to a URL.',
     safe: false,
   },
   {
     filename: 'sample_markdown_injection.pdf',
     label: 'Context manipulation',
-    description: 'Resume that pressures any reviewer model into an "excellent — must hire" verdict.',
+    description: 'Resume steering a reviewer model to "must hire".',
     safe: false,
   },
   {
     filename: 'sample_tiny_text.pdf',
     label: 'Tiny text',
-    description: 'Product reviews with a 2pt instruction overriding the overall sentiment.',
+    description: 'Product reviews with a 2pt instruction flipping sentiment.',
     safe: false,
   },
   {
@@ -48,25 +48,25 @@ const SAMPLES: SamplePdf[] = [
   {
     filename: 'sample_invisible_render.pdf',
     label: 'Invisible render mode',
-    description: 'Compliance attestation using PDF text rendering mode 3 — painted as nothing, still extractable.',
+    description: 'Attestation using render mode 3: never painted, still extracted.',
     safe: false,
   },
   {
     filename: 'sample_metadata_injection.pdf',
     label: 'Metadata & annotations',
-    description: 'Resume with payloads in the Title, Subject, Keywords and a hidden annotation.',
+    description: 'Resume with payloads in Title, Keywords and a hidden annotation.',
     safe: false,
   },
   {
     filename: 'sample_homoglyph.pdf',
     label: 'Lookalike characters',
-    description: 'Support ticket swapping Latin letters for identical Cyrillic ones.',
+    description: 'Support ticket with Cyrillic letters posing as Latin.',
     safe: false,
   },
   {
     filename: 'sample_clean.pdf',
     label: 'Clean document',
-    description: 'An ordinary lunch menu with no injection — the control case.',
+    description: 'An ordinary lunch menu. The control case.',
     safe: true,
   },
 ];
@@ -95,34 +95,40 @@ export default function ExamplePdfs({ onSelectSample }: ExamplePdfsProps) {
         <span className="eyebrow tabular">{SAMPLES.length}</span>
       </div>
 
-      <div className="sample-list">
+      {/* One action per row: the whole row scans. Download sits beside it rather
+          than inside it, because interactive elements cannot nest. Nine of ten
+          samples are payloads, so a "malicious" tag on each carries no signal;
+          only the control case is marked. */}
+      <ul className="sample-list">
         {SAMPLES.map((sample) => (
-          <div key={sample.filename} className="sample-row">
-            <span className="sample-name">{sample.label}</span>
-            <span className="sample-actions">
-              {/* Nine of ten samples are payloads, so "malicious" is the norm here
-                  and carries almost no signal — colouring all nine red would be
-                  chroma without meaning. The control case is the informative one. */}
-              {sample.safe
-                ? <span className="status is-safe">Clean</span>
-                : <span className="chip">Malicious</span>}
-              <button className="btn-secondary" onClick={() => handleTrySample(sample)}>
-                Scan
-              </button>
-              <a
-                className="icon-btn"
-                href={`/samples/${sample.filename}`}
-                download
-                aria-label={`Download ${sample.label} sample`}
-                title="Download"
-              >
-                <Download size={14} />
-              </a>
-            </span>
-            <p className="sample-desc">{sample.description}</p>
-          </div>
+          <li key={sample.filename} className="sample-row">
+            <button
+              type="button"
+              className="sample-scan"
+              onClick={() => handleTrySample(sample)}
+              aria-label={`Scan sample: ${sample.label}${sample.safe ? ' (clean control)' : ''}`}
+            >
+              <span className="sample-name">
+                {sample.label}
+                {sample.safe && <span className="status is-safe">Clean</span>}
+              </span>
+              <span className="sample-desc">{sample.description}</span>
+              <span className="sample-go" aria-hidden="true">
+                Scan <ArrowRight size={13} />
+              </span>
+            </button>
+            <a
+              className="icon-btn"
+              href={`/samples/${sample.filename}`}
+              download
+              aria-label={`Download ${sample.label} sample`}
+              title="Download"
+            >
+              <Download size={14} />
+            </a>
+          </li>
         ))}
-      </div>
+      </ul>
     </section>
   );
 }

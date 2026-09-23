@@ -170,9 +170,8 @@ function App() {
         <div className="page-header">
           <h2>Audit a PDF before your AI reads it</h2>
           <p>
-            Detects hidden instructions, invisible or microscopic text, and jailbreak
-            attempts embedded in documents — the kinds of payloads that hijack an LLM
-            without ever being visible to a human reader.
+            Finds hidden instructions, invisible text and jailbreak payloads that a human
+            reviewer would never see.
           </p>
         </div>
         <div className="main-content">
@@ -202,8 +201,8 @@ function App() {
                 error doesn't strand the user with no examples to retry from. */}
             {!loading && (!results || !!results.error) && (
               <>
-                <WelcomeGuide />
                 <ExamplePdfs onSelectSample={handleSelectSample} />
+                <WelcomeGuide />
               </>
             )}
           </div>

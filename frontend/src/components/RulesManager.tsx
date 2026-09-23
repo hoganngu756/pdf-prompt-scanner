@@ -72,7 +72,7 @@ export default function RulesManager() {
         </div>
       ) : (
         <>
-          <div className="section-head">
+          <div className="section-head is-flush">
             <h3 className="eyebrow">Rules</h3>
             <span className="eyebrow tabular">{rules.length}</span>
           </div>
@@ -88,9 +88,7 @@ export default function RulesManager() {
                 {rules.map((rule) => (
                   <tr key={rule.phrase}>
                     <td><code className="rule-phrase">{rule.phrase}</code></td>
-                    <td>
-                      <span className="chip is-mono">{rule.isRegex ? 'regex' : 'literal'}</span>
-                    </td>
+                    <td className="cell-nowrap">{rule.isRegex ? 'regex' : 'literal'}</td>
                   </tr>
                 ))}
               </tbody>
