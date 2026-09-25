@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -46,6 +47,7 @@ public class ScanOrchestrationService {
         String extractedText = pdfData.extractedText();
         response.setPreviewImagesBase64(pdfData.previewImagesBase64());
         response.setPreviewPageNumbers(pdfData.previewPageNumbers());
+        List<String> limitations = new ArrayList<>(pdfData.limitations());
 
         boolean isOverallSafe = true;
 
@@ -79,7 +81,15 @@ public class ScanOrchestrationService {
             if (lResult.isAvailable() && !lResult.isSafe()) {
                 isOverallSafe = false;
             }
+            if (lResult.isAvailable() && extractedText != null
+                    && extractedText.length() > LlmScannerService.MAX_INPUT_CHARS) {
+                limitations.add(String.format(
+                        "AI analysis covered only the first %,d of %,d characters.",
+                        LlmScannerService.MAX_INPUT_CHARS, extractedText.length()));
+            }
         }
+
+        response.setLimitations(limitations);
 
         log.info("Scan complete for {} | overall safe: {}", fileName, isOverallSafe);
         return response;

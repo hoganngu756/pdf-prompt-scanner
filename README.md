@@ -105,8 +105,8 @@ The service is stateless, so it needs no persistent disk: there is nothing to lo
 ## Testing
 
 ```bash
-cd backend  && ./mvnw test    # 58 tests
-cd frontend && npm test       # 37 tests
+cd backend  && ./mvnw test    # 69 tests
+cd frontend && npm test       # 40 tests
 cd frontend && npm run build
 ```
 

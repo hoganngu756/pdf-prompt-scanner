@@ -48,4 +48,7 @@ export interface ScanResponse {
   /** 1-based source page numbers aligned with previewImagesBase64 by index.
    *  Only flagged pages are rendered, so these are not contiguous. */
   previewPageNumbers?: number[];
+  /** Parts of the document that were not examined in full. Non-empty means the
+   *  scan cannot vouch for the whole file. */
+  limitations?: string[];
 }

@@ -94,6 +94,39 @@ describe('overallVerdict', () => {
   });
 });
 
+describe('scan limitations', () => {
+  const truncated = ['Page text was truncated: only the first 1,000,000 of 2,000,000 characters were analysed.'];
+
+  it('never reports clean when part of the document was not analysed', () => {
+    // Regression: truncated text was dropped silently, so a padded document could
+    // hide its payload past the ceiling and still come back "No injection found".
+    const checks = buildChecks(clean({ limitations: truncated }));
+    const coverage = checks.find((c) => c.name === 'Scan coverage')!;
+    expect(coverage.state).toBe('warn');
+    expect(coverage.note).toBe(truncated[0]);
+    expect(overallVerdict(checks).state).toBe('warn');
+    expect(overallVerdict(checks).summary).toContain('too large to analyse in full');
+  });
+
+  it('still reports a detection, without counting coverage as a check', () => {
+    const verdict = overallVerdict(
+      buildChecks(
+        clean({
+          limitations: truncated,
+          heuristicResult: { safe: false, flags: [{ description: 'y' }], activeRuleCount: 10 },
+        }),
+      ),
+    );
+    expect(verdict.state).toBe('danger');
+    expect(verdict.summary).toContain('1 of 4 checks');
+  });
+
+  it('adds no coverage row when nothing was truncated', () => {
+    const checks = buildChecks(clean({ limitations: [] }));
+    expect(checks.some((c) => c.name === 'Scan coverage')).toBe(false);
+  });
+});
+
 describe('unavailable AI layer', () => {
   const base: ScanResponse = {
     visualObfuscationResult: { safe: true, findings: [] },

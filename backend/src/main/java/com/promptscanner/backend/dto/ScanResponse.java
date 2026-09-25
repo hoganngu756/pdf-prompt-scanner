@@ -10,8 +10,17 @@ public class ScanResponse {
     private String error;
     private List<String> previewImagesBase64;
     private List<Integer> previewPageNumbers;
+    private List<String> limitations = List.of();
 
     public ScanResponse() {}
+
+    /**
+     * Parts of the document the enabled checks did not examine in full. Non-empty
+     * means the scan cannot vouch for the whole file, so a result with no
+     * detections is inconclusive rather than clean.
+     */
+    public List<String> getLimitations() { return limitations; }
+    public void setLimitations(List<String> limitations) { this.limitations = limitations; }
 
     public List<String> getPreviewImagesBase64() { return previewImagesBase64; }
     public void setPreviewImagesBase64(List<String> previewImagesBase64) { this.previewImagesBase64 = previewImagesBase64; }

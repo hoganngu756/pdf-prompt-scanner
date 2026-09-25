@@ -184,9 +184,17 @@ public class IpRateLimitingInterceptor implements HandlerInterceptor {
             return lastRefillTime;
         }
 
-        /** Idle means fully refilled and untouched, so forgetting it changes nothing. */
+        /**
+         * Idle means untouched for the TTL and fully refilled by now, so forgetting
+         * it changes nothing. Tokens are only topped up inside tryConsume(), so the
+         * stored count is stale for an idle bucket; the refill it would have
+         * received is projected here instead, or any bucket spent even once would
+         * never be reclaimed.
+         */
         synchronized boolean isIdleSince(long now, long ttlMs) {
-            return now - lastRefillTime > ttlMs && tokens >= capacity;
+            long elapsed = now - lastRefillTime;
+            double projected = Math.min(capacity, tokens + (elapsed * capacity) / refillIntervalMs);
+            return elapsed > ttlMs && projected >= capacity;
         }
 
         private void refill() {

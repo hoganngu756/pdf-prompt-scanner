@@ -6,6 +6,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -97,6 +98,35 @@ class IpRateLimitingInterceptorTest {
         // 4. The spend must survive it.
         assertFalse(scan("203.0.113.9"),
                 "a flood of distinct addresses must not restore an exhausted budget");
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> buckets() {
+        return (Map<String, Object>) ReflectionTestUtils.getField(interceptor, "buckets");
+    }
+
+    @Test
+    void reclaimsASpentBucketOnceItHasBeenIdleLongEnough() throws Exception {
+        // Regression: tokens are only refilled on use, so an idle bucket that had
+        // been spent even once still looked partly empty and was never reclaimed.
+        scan("1.2.3.4");
+        Object bucket = buckets().get("scan|1.2.3.4");
+        ReflectionTestUtils.setField(bucket, "lastRefillTime", System.currentTimeMillis() - 11 * 60 * 1000L);
+
+        allowSweep();
+        read("5.6.7.8");
+
+        assertFalse(buckets().containsKey("scan|1.2.3.4"));
+    }
+
+    @Test
+    void keepsARecentlySpentBucket() throws Exception {
+        scan("1.2.3.4");
+
+        allowSweep();
+        read("5.6.7.8");
+
+        assertTrue(buckets().containsKey("scan|1.2.3.4"));
     }
 
     @Test

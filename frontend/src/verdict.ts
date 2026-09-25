@@ -20,6 +20,9 @@ export interface Verdict {
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
+/** Not a detection layer, so it is left out of the "N of M checks" counts. */
+const COVERAGE = 'Scan coverage';
+
 /** Flattens a scan response into the rows the report renders. */
 export function buildChecks(results: ScanResponse): Check[] {
   const checks: Check[] = [];
@@ -77,6 +80,19 @@ export function buildChecks(results: ScanResponse): Check[] {
     });
   }
 
+  // Content past a size ceiling was never analysed. With no detection, that
+  // makes the result inconclusive: the unread part is exactly where a padded
+  // document would put its payload.
+  const limitations = results.limitations ?? [];
+  if (limitations.length > 0) {
+    checks.push({
+      name: COVERAGE,
+      state: 'warn',
+      label: 'Incomplete',
+      note: limitations.join(' '),
+    });
+  }
+
   return checks;
 }
 
@@ -88,13 +104,22 @@ export function buildChecks(results: ScanResponse): Check[] {
  * the same failure mode the backend's fail-closed rules guard against.
  */
 export function overallVerdict(checks: Check[]): Verdict {
-  const flagged = checks.filter((c) => c.state === 'danger').length;
+  const layers = checks.filter((c) => c.name !== COVERAGE);
+  const flagged = layers.filter((c) => c.state === 'danger').length;
 
   if (flagged > 0) {
     return {
       state: 'danger',
       headline: 'Injection detected',
-      summary: `${flagged} of ${checks.length} ${plural(checks.length, 'check', 'checks')} flagged this document. Do not pass it to an AI system unmodified.`,
+      summary: `${flagged} of ${layers.length} ${plural(layers.length, 'check', 'checks')} flagged this document. Do not pass it to an AI system unmodified.`,
+    };
+  }
+
+  if (checks.some((c) => c.name === COVERAGE)) {
+    return {
+      state: 'warn',
+      headline: 'Inconclusive',
+      summary: 'Part of this document was too large to analyse in full, so it has not been fully examined.',
     };
   }
 
@@ -109,6 +134,6 @@ export function overallVerdict(checks: Check[]): Verdict {
   return {
     state: 'safe',
     headline: 'No injection found',
-    summary: `All ${checks.length} checks passed. No hidden instructions, disguised text, or suspicious document structure were detected.`,
+    summary: `All ${layers.length} checks passed. No hidden instructions, disguised text, or suspicious document structure were detected.`,
   };
 }

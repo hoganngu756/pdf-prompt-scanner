@@ -15,6 +15,7 @@ import jakarta.annotation.PostConstruct;
 
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -35,17 +36,22 @@ public class PdfScannerService {
     private static final int MAX_OCR_IMAGES = 10;
 
     /**
-     * Ceiling on the text handed to the analysis layers.
+     * Ceiling on the page text handed to the analysis layers.
      *
      * Page count and upload size are both capped, but neither bounds the text a
      * document yields: a 510 KB file of stacked runs produced 7.2 million
      * characters and 15.6 seconds of CPU, since deflate lets a small upload buy a
-     * very large content stream. That text then reaches the regex engine, the
-     * response body, and the Gemini prompt, so it is bounded once here at the
-     * source. A real document that trips this has already given every layer far
-     * more than it needs to reach a verdict.
+     * very large content stream. That text then reaches the regex engine and the
+     * Gemini prompt, so it is bounded here at the source.
      */
-    private static final int MAX_EXTRACTED_CHARS = 1_000_000;
+    static final int MAX_PAGE_TEXT_CHARS = 1_000_000;
+
+    /**
+     * Separate ceilings for the metadata/annotation and OCR sections. Each section
+     * is bounded on its own so that padding the page text can never push the
+     * hidden surfaces out of what the analysis layers see.
+     */
+    static final int MAX_SURFACE_TEXT_CHARS = 200_000;
 
     private final PdfStructureScanner pdfStructureScanner;
     private final PdfPreviewRenderer previewRenderer;
@@ -91,7 +97,10 @@ public class PdfScannerService {
         /** 1-based page numbers matching previewImagesBase64 by index. Only flagged
          *  pages are rendered, so these are not contiguous and must not be inferred
          *  from list position. */
-        List<Integer> previewPageNumbers
+        List<Integer> previewPageNumbers,
+        /** Content that was extracted but not analysed in full. Non-empty means the
+         *  scan cannot vouch for the whole document. */
+        List<String> limitations
     ) {}
 
     /**
@@ -105,9 +114,12 @@ public class PdfScannerService {
                         + " pages (found " + document.getNumberOfPages() + ").");
             }
 
+            List<String> limitations = new ArrayList<>();
+
             HighlightingTextStripper stripper = new HighlightingTextStripper(highlightWords);
             stripper.setSortByPosition(true);
-            String extractedText = truncateExtracted(stripper.getText(document));
+            String extractedText = bounded(stripper.getText(document), MAX_PAGE_TEXT_CHARS,
+                    "Page text", limitations);
             List<Finding> visualFindings = stripper.getVisualObfuscationFindings();
             Map<Integer, List<PDRectangle>> highlightsPerPage = stripper.getHighlightsPerPage();
 
@@ -115,35 +127,39 @@ public class PdfScannerService {
             // stream, so they are recovered separately and appended below.
             PdfStructureScanner.StructureData structure = pdfStructureScanner.scan(document);
             if (!structure.hiddenText().isBlank()) {
-                extractedText += "\n\n--- DOCUMENT METADATA & ANNOTATIONS ---\n" + structure.hiddenText();
+                extractedText += "\n\n--- DOCUMENT METADATA & ANNOTATIONS ---\n"
+                        + bounded(structure.hiddenText(), MAX_SURFACE_TEXT_CHARS,
+                                "Metadata and annotation text", limitations);
             }
 
             String ocrText = runOcr(document);
             if (!ocrText.isEmpty()) {
                 log.debug("Extracted OCR text length: {}", ocrText.length());
-                extractedText += "\n\n--- OCR EXTRACTED TEXT ---\n" + ocrText;
+                extractedText += "\n\n--- OCR EXTRACTED TEXT ---\n"
+                        + bounded(ocrText, MAX_SURFACE_TEXT_CHARS, "OCR text", limitations);
             }
 
             PdfPreviewRenderer.Previews previews = previewRenderer.render(document, highlightsPerPage);
 
-            return new PdfData(truncateExtracted(extractedText), previews.imagesBase64(), visualFindings,
-                    structure.findings(), previews.pageNumbers());
+            return new PdfData(extractedText, previews.imagesBase64(), visualFindings,
+                    structure.findings(), previews.pageNumbers(), limitations);
         }
     }
 
     /**
-     * Applied to the page text before the metadata and OCR sections are appended,
-     * and again to the result, so neither the page content nor the total can run
-     * away. The marker is left in place so a truncated scan is visible rather than
-     * silently partial.
+     * Cuts one section to its ceiling. A cut is recorded as a limitation rather
+     * than only a log line: content past the ceiling is never analysed, so a scan
+     * that silently dropped it could report a document as clean on the strength
+     * of the part the author chose to show.
      */
-    private static String truncateExtracted(String text) {
-        if (text == null || text.length() <= MAX_EXTRACTED_CHARS) {
+    static String bounded(String text, int max, String section, List<String> limitations) {
+        if (text == null || text.length() <= max) {
             return text;
         }
-        log.warn("Extracted text of {} chars exceeds the {} char limit; truncating.",
-                text.length(), MAX_EXTRACTED_CHARS);
-        return text.substring(0, MAX_EXTRACTED_CHARS) + "\n\n--- TEXT TRUNCATED AT SCAN LIMIT ---";
+        log.warn("{} of {} chars exceeds the {} char limit; truncating.", section, text.length(), max);
+        limitations.add(String.format("%s was truncated: only the first %,d of %,d characters were analysed.",
+                section, max, text.length()));
+        return text.substring(0, max) + "\n\n--- TEXT TRUNCATED AT SCAN LIMIT ---";
     }
 
     /**
