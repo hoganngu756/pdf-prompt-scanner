@@ -17,8 +17,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Deque;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -217,17 +222,45 @@ public class PdfStructureScanner {
         }
     }
 
+    /**
+     * Walks the whole bookmark tree, not just the top level. A child bookmark is
+     * as visible to an LLM as a top-level one, and reading only outline.children()
+     * let an injection hide one level down under an innocuous chapter title.
+     *
+     * The tree comes from the uploaded file, so its /First and /Next links can be
+     * made to loop. The traversal is iterative (no recursion depth to exhaust) and
+     * remembers every node it has visited, so a cycle ends the walk instead of
+     * spinning until the item cap.
+     */
     private void collectOutline(PDDocument document, StringBuilder recovered, List<Finding> findings) {
         try {
             PDDocumentOutline outline = document.getDocumentCatalog().getDocumentOutline();
             if (outline == null) {
                 return;
             }
+            Set<COSDictionary> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+            Deque<PDOutlineItem> pending = new ArrayDeque<>();
+            if (outline.getFirstChild() != null) {
+                pending.push(outline.getFirstChild());
+            }
             int seen = 0;
-            for (PDOutlineItem item : outline.children()) {
+            while (!pending.isEmpty()) {
+                PDOutlineItem item = pending.pop();
+                if (!visited.add(item.getCOSObject())) {
+                    continue;
+                }
                 if (++seen > MAX_OUTLINE_ITEMS) {
+                    log.info("Stopping outline scan at {} bookmarks.", MAX_OUTLINE_ITEMS);
                     break;
                 }
+                // Sibling first so the child is popped next: document order.
+                if (item.getNextSibling() != null) {
+                    pending.push(item.getNextSibling());
+                }
+                if (item.getFirstChild() != null) {
+                    pending.push(item.getFirstChild());
+                }
+
                 String title = item.getTitle();
                 if (title != null && !title.isBlank()) {
                     String trimmed = truncate(title.trim());
