@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.function.Predicate;
 
 public class HighlightingTextStripper extends PDFTextStripper {
 
@@ -38,8 +39,11 @@ public class HighlightingTextStripper extends PDFTextStripper {
     private static final float TRANSPARENT_ALPHA = 0.05f;
     /** Text below this size is unreadable at normal zoom. */
     private static final float TINY_TEXT_PT = 3.0f;
-    /** Contiguous tiny characters needed to report; shorter is a footnote marker. */
-    private static final int MIN_TINY_RUN_CHARS = 5;
+    /**
+     * Contiguous hidden characters needed to report a stretch inside an otherwise
+     * visible line; shorter is a footnote marker or a stray glyph.
+     */
+    private static final int MIN_HIDDEN_RUN_CHARS = 5;
     /** Share of glyphs in a run that must be hidden before the run is reported. */
     private static final double HIDDEN_RUN_THRESHOLD = 0.8;
 
@@ -140,56 +144,62 @@ public class HighlightingTextStripper extends PDFTextStripper {
     protected void writeString(String text, List<TextPosition> textPositions) throws IOException {
         super.writeString(text, textPositions);
         
-        boolean isWhiteText = false;
-        int whiteCount = 0;
-        for (TextPosition tp : textPositions) {
-            float[] rgb = characterColors.get(tp);
-            if (rgb != null && rgb.length >= 3) {
-                if (rgb[0] > 0.97f && rgb[1] > 0.97f && rgb[2] > 0.97f) {
-                    whiteCount++;
-                }
-            }
-        }
-        if (!textPositions.isEmpty() && whiteCount >= textPositions.size() * 0.8) {
-            isWhiteText = true;
-        }
+        // Each mechanism is judged two ways. A line that is mostly hidden is
+        // reported whole, however short (the original rule). A line that is
+        // mostly visible is still reported when it contains an unbroken hidden
+        // stretch long enough to carry an instruction: otherwise appending a
+        // white or transparent payload to a long ordinary line kept the hidden
+        // share under the threshold and the payload went unreported.
+        Predicate<TextPosition> invisible = invisibleModeGlyphs::contains;
+        Predicate<TextPosition> transparent = transparentGlyphs::contains;
+        Predicate<TextPosition> white = this::isWhite;
+        Predicate<TextPosition> tiny = HighlightingTextStripper::isTiny;
 
-        List<List<TextPosition>> tinyRuns = tinyRuns(textPositions);
-        boolean hasTinyText = !tinyRuns.isEmpty();
-        float minSizeFound = Float.MAX_VALUE;
-        for (List<TextPosition> run : tinyRuns) {
-            for (TextPosition tp : run) {
-                minSizeFound = Math.min(minSizeFound, tp.getFontSizeInPt());
-            }
-        }
-
-        boolean isInvisibleMode = majorityOf(textPositions, invisibleModeGlyphs);
-        boolean isTransparent = majorityOf(textPositions, transparentGlyphs);
+        List<String> reasons = new ArrayList<>();
+        // Glyphs to quote and highlight, unless the whole line is hidden
+        Set<TextPosition> hiddenGlyphs = Collections.newSetFromMap(new IdentityHashMap<>());
+        boolean wholeLine = false;
 
         // Each mechanism is reported by name so the user learns how it was hidden
-        List<String> reasons = new ArrayList<>();
-        if (isInvisibleMode) {
-            reasons.add("invisible text rendering mode (Tr 3)");
+        List<Mechanism> mechanisms = List.of(
+                new Mechanism("invisible text rendering mode (Tr 3)", invisible),
+                new Mechanism("fully transparent fill", transparent),
+                new Mechanism("white/near-white text", white));
+        for (Mechanism mechanism : mechanisms) {
+            if (majorityOf(textPositions, mechanism.hidden())) {
+                reasons.add(mechanism.name());
+                wholeLine = true;
+                continue;
+            }
+            List<List<TextPosition>> runs = hiddenRuns(textPositions, mechanism.hidden());
+            if (!runs.isEmpty()) {
+                reasons.add(mechanism.name());
+                runs.forEach(hiddenGlyphs::addAll);
+            }
         }
-        if (isTransparent) {
-            reasons.add("fully transparent fill");
-        }
-        if (isWhiteText) {
-            reasons.add("white/near-white text");
-        }
-        if (hasTinyText) {
+
+        // Tiny text has no whole-line rule: a line of footnote-sized text is
+        // usually a footnote, and only a stretch long enough to say something
+        // is worth reporting.
+        List<List<TextPosition>> tinyRuns = hiddenRuns(textPositions, tiny);
+        if (!tinyRuns.isEmpty()) {
+            float minSizeFound = Float.MAX_VALUE;
+            for (List<TextPosition> run : tinyRuns) {
+                for (TextPosition tp : run) {
+                    minSizeFound = Math.min(minSizeFound, tp.getFontSizeInPt());
+                }
+                hiddenGlyphs.addAll(run);
+            }
             reasons.add(String.format("tiny text (size %.1fpt)", minSizeFound));
         }
 
         if (!reasons.isEmpty()) {
-            // When tiny text is the only mechanism it may share the line with
-            // ordinary text, so quote and highlight just the tiny part rather than
-            // presenting the readable words around it as hidden.
-            boolean tinyOnly = hasTinyText && reasons.size() == 1;
-            List<TextPosition> hiddenGlyphs = tinyOnly
-                    ? tinyRuns.stream().flatMap(List::stream).toList()
-                    : textPositions;
-            String trimmedText = tinyOnly ? textOf(tinyRuns) : text.trim();
+            // Quote and highlight only the hidden part when the rest of the line
+            // is readable, rather than presenting the visible words as hidden.
+            List<List<TextPosition>> hiddenParts = wholeLine
+                    ? List.of(textPositions)
+                    : hiddenRuns(textPositions, hiddenGlyphs::contains, 1);
+            String trimmedText = wholeLine ? text.trim() : textOf(hiddenParts);
             // Both lists are serialised into the scan response, so a document made of
             // hidden runs would otherwise amplify a small upload into a multi-megabyte
             // body -- expensive to build, and enough to hang the browser rendering it.
@@ -199,7 +209,7 @@ public class HighlightingTextStripper extends PDFTextStripper {
                         "Page " + getCurrentPageNo(),
                         truncate(trimmedText)));
 
-                addHighlight(computeBoundingBox(hiddenGlyphs));
+                addHighlight(computeBoundingBox(hiddenParts.stream().flatMap(List::stream).toList()));
             }
         }
 
@@ -212,18 +222,35 @@ public class HighlightingTextStripper extends PDFTextStripper {
         }
     }
 
+    /** One way of hiding a glyph, named for the report. */
+    private record Mechanism(String name, Predicate<TextPosition> hidden) {}
+
+    private boolean isWhite(TextPosition tp) {
+        float[] rgb = characterColors.get(tp);
+        return rgb != null && rgb.length >= 3 && rgb[0] > 0.97f && rgb[1] > 0.97f && rgb[2] > 0.97f;
+    }
+
+    private static boolean isTiny(TextPosition tp) {
+        float size = tp.getFontSizeInPt();
+        return size > 0 && size < TINY_TEXT_PT;
+    }
+
     /**
-     * Unbroken stretches of sub-3pt glyphs long enough to carry an instruction.
+     * Unbroken stretches of hidden glyphs long enough to carry an instruction.
      *
-     * Any single tiny glyph used to flag its whole line, so a footnote marker or a
-     * superscript reference made an ordinary sentence read as hidden text. A share
-     * of the line (the rule the other mechanisms use) would not do either: a tiny
-     * payload tacked onto a long visible line is a small share of it. Requiring a
-     * contiguous run of several characters separates the two. Whitespace glyphs
-     * neither count towards a run nor break it, since tiny words are still
-     * separated by spaces.
+     * A share-of-the-line rule alone misses a hidden payload tacked onto a long
+     * visible line, and "any hidden glyph" fires on a footnote marker. Requiring
+     * a contiguous run of several characters separates the two. Whitespace
+     * glyphs neither count towards a run nor break it, since hidden words are
+     * still separated by spaces.
      */
-    private static List<List<TextPosition>> tinyRuns(List<TextPosition> textPositions) {
+    private static List<List<TextPosition>> hiddenRuns(List<TextPosition> textPositions,
+                                                        Predicate<TextPosition> hidden) {
+        return hiddenRuns(textPositions, hidden, MIN_HIDDEN_RUN_CHARS);
+    }
+
+    private static List<List<TextPosition>> hiddenRuns(List<TextPosition> textPositions,
+                                                        Predicate<TextPosition> hidden, int minChars) {
         List<List<TextPosition>> runs = new ArrayList<>();
         List<TextPosition> current = new ArrayList<>();
         int visible = 0;
@@ -232,19 +259,18 @@ public class HighlightingTextStripper extends PDFTextStripper {
             if (unicode == null || unicode.isBlank()) {
                 continue;
             }
-            float size = tp.getFontSizeInPt();
-            if (size > 0 && size < TINY_TEXT_PT) {
+            if (hidden.test(tp)) {
                 current.add(tp);
                 visible++;
             } else {
-                if (visible >= MIN_TINY_RUN_CHARS) {
+                if (visible >= minChars) {
                     runs.add(current);
                 }
                 current = new ArrayList<>();
                 visible = 0;
             }
         }
-        if (visible >= MIN_TINY_RUN_CHARS) {
+        if (visible >= minChars) {
             runs.add(current);
         }
         return runs;
@@ -315,13 +341,13 @@ public class HighlightingTextStripper extends PDFTextStripper {
      * True when enough glyphs in the run carry a property that a stray character
      * or two shouldn't trigger the finding on its own.
      */
-    private boolean majorityOf(List<TextPosition> textPositions, Set<TextPosition> marked) {
-        if (textPositions.isEmpty() || marked.isEmpty()) {
+    private boolean majorityOf(List<TextPosition> textPositions, Predicate<TextPosition> hidden) {
+        if (textPositions.isEmpty()) {
             return false;
         }
         int count = 0;
         for (TextPosition tp : textPositions) {
-            if (marked.contains(tp)) {
+            if (hidden.test(tp)) {
                 count++;
             }
         }

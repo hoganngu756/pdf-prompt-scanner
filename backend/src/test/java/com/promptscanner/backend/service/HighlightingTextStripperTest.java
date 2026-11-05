@@ -129,4 +129,87 @@ class HighlightingTextStripperTest {
                     "only the tiny part is hidden; the readable words around it are not");
         }
     }
+
+    @FunctionalInterface
+    private interface Styler {
+        void apply(PDPageContentStream cs) throws IOException;
+    }
+
+    /** One line: visible 12pt text, then {@code hidden} drawn after applying {@code style}. */
+    private PDDocument documentWithHiddenSuffix(String visible, String hidden, Styler style) throws IOException {
+        PDDocument doc = new PDDocument();
+        PDPage page = new PDPage();
+        doc.addPage(page);
+        PDType1Font font = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+        try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+            cs.beginText();
+            cs.setFont(font, 12);
+            cs.newLineAtOffset(50, 700);
+            cs.showText(visible);
+            style.apply(cs);
+            cs.showText(hidden);
+            cs.endText();
+        }
+        return doc;
+    }
+
+    private static final String LONG_VISIBLE_LINE =
+            "This quarterly report summarises revenue, costs, hiring and headcount across all regions and teams";
+
+    private static final Styler WHITE = cs -> cs.setNonStrokingColor(1f, 1f, 1f);
+    private static final Styler INVISIBLE = cs -> cs.setRenderingMode(RenderingMode.NEITHER);
+    private static final Styler TRANSPARENT = cs -> {
+        org.apache.pdfbox.pdmodel.graphics.state.PDExtendedGraphicsState gs =
+                new org.apache.pdfbox.pdmodel.graphics.state.PDExtendedGraphicsState();
+        gs.setNonStrokingAlphaConstant(0f);
+        cs.setGraphicsStateParameters(gs);
+    };
+
+    private void assertHiddenSuffixFlagged(Styler style, String mechanism) throws IOException {
+        // Regression: the hidden part was under 80% of the line, so it went unreported
+        try (PDDocument doc = documentWithHiddenSuffix(LONG_VISIBLE_LINE, " " + PAYLOAD, style)) {
+            List<Finding> findings = findingsFor(doc);
+
+            assertEquals(1, findings.size());
+            assertTrue(findings.get(0).description().contains(mechanism), findings.get(0).description());
+            assertTrue(findings.get(0).quote().replace(" ", "").contains(PAYLOAD.replace(" ", "")),
+                    findings.get(0).quote());
+            assertFalse(findings.get(0).quote().contains("quarterly"),
+                    "only the hidden part is quoted, not the readable words before it");
+        }
+    }
+
+    @Test
+    void flagsWhiteTextAppendedToAVisibleLine() throws IOException {
+        assertHiddenSuffixFlagged(WHITE, "white/near-white text");
+    }
+
+    @Test
+    void flagsInvisibleModeTextAppendedToAVisibleLine() throws IOException {
+        assertHiddenSuffixFlagged(INVISIBLE, "invisible text rendering mode");
+    }
+
+    @Test
+    void flagsTransparentTextAppendedToAVisibleLine() throws IOException {
+        assertHiddenSuffixFlagged(TRANSPARENT, "fully transparent fill");
+    }
+
+    @Test
+    void doesNotFlagAStrayWhiteGlyphInAVisibleLine() throws IOException {
+        // A white bullet or separator is too short to carry an instruction
+        try (PDDocument doc = documentWithHiddenSuffix(LONG_VISIBLE_LINE, " ab", WHITE)) {
+            assertTrue(findingsFor(doc).isEmpty());
+        }
+    }
+
+    @Test
+    void stillFlagsAShortLineThatIsEntirelyHidden() throws IOException {
+        // The whole-line rule is kept: a fully white line is reported however short
+        try (PDDocument doc = documentWithHiddenSuffix("", "HIRE", WHITE)) {
+            List<Finding> findings = findingsFor(doc);
+
+            assertEquals(1, findings.size());
+            assertEquals("HIRE", findings.get(0).quote());
+        }
+    }
 }
