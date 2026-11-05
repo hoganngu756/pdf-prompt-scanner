@@ -16,6 +16,11 @@ import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationWidget;
 import org.apache.pdfbox.pdmodel.interactive.form.PDAcroForm;
 import org.apache.pdfbox.pdmodel.interactive.form.PDTextField;
 import org.apache.pdfbox.cos.COSString;
+import org.apache.pdfbox.cos.COSArray;
+import org.apache.pdfbox.cos.COSBase;
+import org.apache.pdfbox.cos.COSDictionary;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import com.promptscanner.backend.dto.Finding;
 import java.io.ByteArrayInputStream;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocumentOutline;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineItem;
@@ -81,18 +86,158 @@ class PdfStructureScannerTest {
         }
     }
 
+    private static COSDictionary action(String type) {
+        COSDictionary action = new COSDictionary();
+        action.setItem(COSName.S, COSName.getPDFName(type));
+        return action;
+    }
+
+    private static void setOpenAction(PDDocument doc, COSBase value) {
+        doc.getDocumentCatalog().getCOSObject().setItem(COSName.getPDFName("OpenAction"), value);
+    }
+
     @Test
-    void scan_FlagsAutoRunOpenAction() throws IOException {
+    void scan_FlagsJavaScriptOpenAction() throws IOException {
         try (PDDocument doc = new PDDocument()) {
             doc.addPage(new PDPage());
-            doc.getDocumentCatalog().getCOSObject().setItem(
-                    org.apache.pdfbox.cos.COSName.getPDFName("OpenAction"),
-                    new org.apache.pdfbox.cos.COSDictionary());
+            setOpenAction(doc, action("JavaScript"));
 
             assertTrue(scanner.scan(doc).findings().stream()
-                    .anyMatch(f -> f.description().contains("OpenAction")));
+                    .anyMatch(f -> f.description().contains("runs embedded JavaScript automatically")));
         }
     }
+
+    @Test
+    void scan_DoesNotFlagAnOpenActionThatJustOpensAtAPage() throws IOException {
+        // Regression: any /OpenAction was flagged, but most just set the opening
+        // page and zoom -- either as a destination array or a GoTo action
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage();
+            doc.addPage(page);
+            COSArray destination = new COSArray();
+            destination.add(page.getCOSObject());
+            destination.add(COSName.getPDFName("Fit"));
+            setOpenAction(doc, destination);
+            assertTrue(scanner.scan(doc).findings().isEmpty());
+
+            COSDictionary goTo = action("GoTo");
+            goTo.setItem(COSName.D, destination);
+            setOpenAction(doc, goTo);
+            assertTrue(scanner.scan(doc).findings().isEmpty());
+        }
+    }
+
+    @Test
+    void scan_FollowsTheNextChainOfAnOpenAction() throws IOException {
+        // A harmless GoTo can chain to JavaScript through /Next
+        try (PDDocument doc = new PDDocument()) {
+            doc.addPage(new PDPage());
+            COSDictionary goTo = action("GoTo");
+            COSArray next = new COSArray();
+            next.add(action("Named"));
+            next.add(action("Launch"));
+            goTo.setItem(COSName.NEXT, next);
+            setOpenAction(doc, goTo);
+
+            assertTrue(scanner.scan(doc).findings().stream()
+                    .anyMatch(f -> f.description().contains("launches an external program")));
+        }
+    }
+
+    @Test
+    void scan_TerminatesOnACyclicActionChain() throws IOException {
+        try (PDDocument doc = new PDDocument()) {
+            doc.addPage(new PDPage());
+            COSDictionary a = action("GoTo");
+            COSDictionary b = action("JavaScript");
+            a.setItem(COSName.NEXT, b);
+            b.setItem(COSName.NEXT, a);
+            setOpenAction(doc, a);
+
+            List<Finding> findings = assertTimeoutPreemptively(Duration.ofSeconds(5),
+                    () -> scanner.scan(doc).findings());
+            assertEquals(1, findings.size());
+        }
+    }
+
+    @Test
+    void scan_FlagsDocumentLevelAdditionalActions() throws IOException {
+        // /AA on the catalog runs on events like "before print", unprompted
+        try (PDDocument doc = new PDDocument()) {
+            doc.addPage(new PDPage());
+            COSDictionary additional = new COSDictionary();
+            additional.setItem(COSName.getPDFName("WP"), action("JavaScript"));
+            doc.getDocumentCatalog().getCOSObject().setItem(COSName.AA, additional);
+
+            assertFalse(scanner.scan(doc).findings().isEmpty());
+        }
+    }
+
+    // ----- links -----
+
+    private static PDAnnotationLink link(String uri, PDRectangle rect) {
+        PDAnnotationLink link = new PDAnnotationLink();
+        link.setRectangle(rect);
+        COSDictionary action = action("URI");
+        action.setString(COSName.URI, uri);
+        link.getCOSObject().setItem(COSName.A, action);
+        return link;
+    }
+
+    private static final PDRectangle VISIBLE = new PDRectangle(50, 700, 150, 20);
+
+    @Test
+    void scan_DoesNotFlagAnOrdinaryLink() throws IOException {
+        // Regression: every web link was a finding, so any document with a
+        // hyperlink read as "Injection detected"
+        try (PDDocument doc = documentWithAnnotations(List.of(link("https://example.com/docs", VISIBLE)))) {
+            PdfStructureScanner.StructureData data = scanner.scan(doc);
+
+            assertTrue(data.findings().isEmpty());
+            assertTrue(data.hiddenText().contains("Link: https://example.com/docs"),
+                    "the URI still goes to the analysis layers");
+        }
+    }
+
+    @Test
+    void scan_FlagsLinksThatRunCode() throws IOException {
+        try (PDDocument doc = documentWithAnnotations(List.of(
+                link("javascript:alert(1)", VISIBLE), link(" JavaScript:alert(2)", VISIBLE)))) {
+            List<Finding> findings = scanner.scan(doc).findings();
+
+            assertEquals(2, findings.size());
+            assertTrue(findings.stream().allMatch(f -> f.description().contains("javascript: URI")));
+        }
+    }
+
+    @Test
+    void scan_FlagsHiddenLinks() throws IOException {
+        PDAnnotationLink zeroSize = link("https://a.example/", new PDRectangle(50, 700, 0, 0));
+        PDAnnotationLink offPage = link("https://b.example/", new PDRectangle(5000, 5000, 100, 20));
+        PDAnnotationLink hiddenFlag = link("https://c.example/", VISIBLE);
+        hiddenFlag.setHidden(true);
+
+        try (PDDocument doc = documentWithAnnotations(List.of(zeroSize, offPage, hiddenFlag))) {
+            List<Finding> findings = scanner.scan(doc).findings();
+
+            assertEquals(3, findings.size());
+            assertTrue(findings.stream().allMatch(f -> f.description().startsWith("Hidden link")));
+        }
+    }
+
+    @Test
+    void scan_FlagsAnnotationActionsChainedFromALink() throws IOException {
+        PDAnnotationLink link = link("https://example.com", VISIBLE);
+        COSDictionary uriAction = (COSDictionary) link.getCOSObject().getDictionaryObject(COSName.A);
+        uriAction.setItem(COSName.NEXT, action("JavaScript"));
+
+        try (PDDocument doc = documentWithAnnotations(List.of(link))) {
+            assertTrue(scanner.scan(doc).findings().stream()
+                    .anyMatch(f -> f.description().contains("runs embedded JavaScript when activated")));
+        }
+    }
+
+    // ----- bookmarks -----
 
     private static PDOutlineItem bookmark(String title) {
         PDOutlineItem item = new PDOutlineItem();

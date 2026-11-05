@@ -79,4 +79,54 @@ class HighlightingTextStripperTest {
             assertTrue(findingsFor(doc).isEmpty());
         }
     }
+
+    /** One line: normal 12pt text, immediately followed by a second run at {@code tinySize}. */
+    private PDDocument documentWithTrailingRun(String normal, String trailing, float tinySize) throws IOException {
+        PDDocument doc = new PDDocument();
+        PDPage page = new PDPage();
+        doc.addPage(page);
+        PDType1Font font = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+        try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+            cs.beginText();
+            cs.setFont(font, 12);
+            cs.newLineAtOffset(50, 700);
+            cs.showText(normal);
+            cs.setFont(font, tinySize);
+            cs.showText(trailing);
+            cs.endText();
+        }
+        return doc;
+    }
+
+    @Test
+    void doesNotFlagAFootnoteMarker() throws IOException {
+        // Regression: one sub-3pt glyph flagged the whole sentence as hidden text
+        try (PDDocument doc = documentWithTrailingRun("Revenue grew 4 percent", "*", 2.5f)) {
+            assertTrue(findingsFor(doc).isEmpty());
+        }
+    }
+
+    @Test
+    void doesNotFlagAShortSuperscriptReference() throws IOException {
+        try (PDDocument doc = documentWithTrailingRun("As shown in prior work", "[12]", 2.5f)) {
+            assertTrue(findingsFor(doc).isEmpty());
+        }
+    }
+
+    @Test
+    void flagsATinyPayloadAppendedToAVisibleLine() throws IOException {
+        // A share-of-the-line rule would miss this: the payload is a minority of
+        // the glyphs. A contiguous tiny run still catches it.
+        String visible = "This quarterly report summarises revenue, costs and headcount across all regions";
+        try (PDDocument doc = documentWithTrailingRun(visible, " " + PAYLOAD, 1.5f)) {
+            List<Finding> findings = findingsFor(doc);
+
+            assertEquals(1, findings.size());
+            assertTrue(findings.get(0).description().contains("tiny text"));
+            assertTrue(findings.get(0).quote().replace(" ", "").contains(PAYLOAD.replace(" ", "")),
+                    findings.get(0).quote());
+            assertFalse(findings.get(0).quote().contains("quarterly"),
+                    "only the tiny part is hidden; the readable words around it are not");
+        }
+    }
 }

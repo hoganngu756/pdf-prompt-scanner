@@ -1,5 +1,6 @@
 package com.promptscanner.backend.service;
 
+import org.apache.pdfbox.cos.COSArray;
 import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
@@ -14,6 +15,7 @@ import org.apache.pdfbox.pdmodel.common.filespecification.PDComplexFileSpecifica
 import org.apache.pdfbox.pdmodel.common.filespecification.PDEmbeddedFile;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDMetadata;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotation;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationFileAttachment;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationWidget;
@@ -74,6 +76,19 @@ public class PdfStructureScanner {
     private static final List<COSName> ANNOTATION_TEXT_KEYS =
             List.of(COSName.CONTENTS, COSName.T, COSName.getPDFName("Subj"), COSName.RC);
     private static final Pattern MARKUP_TAG = Pattern.compile("<[^>]*>");
+
+    /** Action types that run code or move data in or out, with what each does. */
+    private static final Map<String, String> CODE_ACTIONS = Map.of(
+            "JavaScript", "runs embedded JavaScript",
+            "Launch", "launches an external program",
+            "SubmitForm", "submits form data to an external address",
+            "ImportData", "imports data from an external file");
+
+    /** URI schemes that execute or embed content rather than navigate to a page. */
+    private static final Set<String> CODE_URI_SCHEMES = Set.of("javascript", "vbscript", "data", "file");
+
+    /** Ceiling on actions followed through /Next chains from one trigger. */
+    private static final int MAX_ACTION_CHAIN = 100;
     private static final int MAX_OUTLINE_ITEMS = 200;
     private static final int MAX_METADATA_ENTRIES = 200;
     private static final int MAX_XMP_BYTES = 512 * 1024;
@@ -271,8 +286,32 @@ public class PdfStructureScanner {
         try {
             COSDictionary root = document.getDocumentCatalog().getCOSObject();
 
-            if (root.getDictionaryObject(COSName.getPDFName("OpenAction")) != null) {
-                findings.add(Finding.of("Document defines an /OpenAction that runs automatically when opened."));
+            // Most /OpenAction entries just open the document at a page and zoom
+            // (a destination array, or a GoTo action) and flagging every one made
+            // ordinary PDFs read as "Injection detected". Only actions that run
+            // code or reach outside the document are reported -- anywhere in the
+            // /Next chain, since a GoTo can chain to JavaScript. The document's
+            // /AA triggers (before print, on close, ...) run unprompted too.
+            List<COSBase> automatic = new ArrayList<>();
+            automatic.add(root.getDictionaryObject(COSName.getPDFName("OpenAction")));
+            if (root.getDictionaryObject(COSName.AA) instanceof COSDictionary additional) {
+                additional.getValues().forEach(automatic::add);
+            }
+            Set<String> reported = new HashSet<>();
+            for (COSBase trigger : automatic) {
+                for (COSDictionary action : actionChain(trigger)) {
+                    String type = action.getNameAsString(COSName.S);
+                    if (type == null) {
+                        continue;
+                    }
+                    String effect = CODE_ACTIONS.get(type);
+                    if (effect == null && "URI".equals(type)) {
+                        effect = "opens a web address";
+                    }
+                    if (effect != null && reported.add(type)) {
+                        findings.add(Finding.of("Document " + effect + " automatically, without the reader acting."));
+                    }
+                }
             }
 
             COSBase names = root.getDictionaryObject(COSName.NAMES);
@@ -325,7 +364,7 @@ public class PdfStructureScanner {
                                 MAX_ANNOTATIONS_WALKED));
                         return;
                     }
-                    describeAction(annotation, findings);
+                    describeAction(annotation, page, recovered, findings);
                     if (annotation instanceof PDAnnotationFileAttachment fileAttachment) {
                         findings.add(Finding.of("Annotation embeds a file attachment (/FileAttachment)."));
                         if (fileAttachment.getFile() instanceof PDComplexFileSpecification spec) {
@@ -418,33 +457,114 @@ public class PdfStructureScanner {
         return null;
     }
 
-    private void describeAction(PDAnnotation annotation, List<Finding> findings) {
+    /**
+     * Reports what an annotation does when activated or hovered: its /A action and
+     * every /AA trigger, each followed down its /Next chain.
+     *
+     * Ordinary links are recovered for analysis but no longer reported on their
+     * own -- nearly every real document has them, and flagging each one made a
+     * PDF with a hyperlink read as "Injection detected". A link is reported only
+     * when it runs code (a javascript: or similar URI) or is hidden from the
+     * reader, which is when it stops being an ordinary link.
+     */
+    private void describeAction(PDAnnotation annotation, PDPage page, StringBuilder recovered,
+                                List<Finding> findings) {
         try {
-            COSBase actionBase = annotation.getCOSObject().getDictionaryObject(COSName.A);
-            if (!(actionBase instanceof COSDictionary actionDict)) {
-                return;
+            COSDictionary dict = annotation.getCOSObject();
+            List<COSBase> triggers = new ArrayList<>();
+            triggers.add(dict.getDictionaryObject(COSName.A));
+            if (dict.getDictionaryObject(COSName.AA) instanceof COSDictionary additional) {
+                additional.getValues().forEach(triggers::add);
             }
-            String subtype = actionDict.getNameAsString(COSName.S);
-            if (subtype == null) {
-                return;
-            }
-            switch (subtype) {
-                case "JavaScript" -> findings.add(
-                        Finding.of("Annotation triggers embedded JavaScript when activated."));
-                case "Launch" -> findings.add(
-                        Finding.of("Annotation defines a /Launch action that opens an external program."));
-                case "URI" -> {
-                    String uri = actionDict.getString(COSName.URI);
-                    if (uri != null && !uri.isBlank()) {
-                        findings.add(Finding.quoting(
-                                "Annotation links to an external URI", truncate(uri.trim())));
+            for (COSBase trigger : triggers) {
+                for (COSDictionary action : actionChain(trigger)) {
+                    String type = action.getNameAsString(COSName.S);
+                    if (type == null) {
+                        continue;
                     }
+                    if (CODE_ACTIONS.containsKey(type)) {
+                        findings.add(Finding.of("Annotation " + CODE_ACTIONS.get(type) + " when activated."));
+                    } else if ("URI".equals(type)) {
+                        describeLink(action.getString(COSName.URI), annotation, page, recovered, findings);
+                    }
+                    // GoTo, Named and the other navigation actions are unremarkable
                 }
-                default -> { /* ordinary navigation actions are unremarkable */ }
             }
         } catch (Exception e) {
             log.debug("Could not read annotation action: {}", e.getMessage());
         }
+    }
+
+    private void describeLink(String uri, PDAnnotation annotation, PDPage page, StringBuilder recovered,
+                              List<Finding> findings) {
+        if (uri == null || uri.isBlank()) {
+            return;
+        }
+        String trimmed = truncate(uri.trim());
+        // Pipelines that convert a PDF for a model often keep link targets, so the
+        // URI goes to the analysis layers either way.
+        recovered.append("Link: ").append(trimmed).append("\n");
+
+        int colon = trimmed.indexOf(':');
+        String scheme = colon > 0 ? trimmed.substring(0, colon).strip().toLowerCase(java.util.Locale.ROOT) : "";
+        if (CODE_URI_SCHEMES.contains(scheme)) {
+            findings.add(Finding.quoting("Link runs code instead of opening a web page (" + scheme + ": URI)",
+                    trimmed));
+        } else if (isHiddenFromReader(annotation, page)) {
+            findings.add(Finding.quoting(
+                    "Hidden link: present in the file but with no visible, clickable area", trimmed));
+        }
+    }
+
+    /** True when a reader could never see or click the annotation. */
+    private static boolean isHiddenFromReader(PDAnnotation annotation, PDPage page) {
+        if (annotation.isHidden() || annotation.isNoView()) {
+            return true;
+        }
+        PDRectangle rect = annotation.getRectangle();
+        if (rect == null || Math.abs(rect.getWidth()) < 1 || Math.abs(rect.getHeight()) < 1) {
+            return true;
+        }
+        PDRectangle visible = page.getCropBox();
+        float minX = Math.min(rect.getLowerLeftX(), rect.getUpperRightX());
+        float maxX = Math.max(rect.getLowerLeftX(), rect.getUpperRightX());
+        float minY = Math.min(rect.getLowerLeftY(), rect.getUpperRightY());
+        float maxY = Math.max(rect.getLowerLeftY(), rect.getUpperRightY());
+        return maxX <= visible.getLowerLeftX() || minX >= visible.getUpperRightX()
+                || maxY <= visible.getLowerLeftY() || minY >= visible.getUpperRightY();
+    }
+
+    /**
+     * The action dictionaries reachable from {@code start} through /Next, which
+     * may be a single action or an array of them. An innocuous first action can
+     * chain to JavaScript, so looking only at the first one is not enough. The
+     * chain comes from the file, so it is walked with a cycle guard and a cap.
+     */
+    private static List<COSDictionary> actionChain(COSBase start) {
+        List<COSDictionary> actions = new ArrayList<>();
+        Set<COSDictionary> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        Deque<COSBase> pending = new ArrayDeque<>();
+        if (start != null) {
+            pending.push(start);
+        }
+        while (!pending.isEmpty() && actions.size() < MAX_ACTION_CHAIN) {
+            COSBase next = pending.pop();
+            if (next instanceof COSObject ref) {
+                next = ref.getObject();
+            }
+            if (next instanceof COSArray array) {
+                for (int i = array.size() - 1; i >= 0; i--) {
+                    pending.push(array.getObject(i));
+                }
+            } else if (next instanceof COSDictionary action && visited.add(action)) {
+                actions.add(action);
+                COSBase chained = action.getDictionaryObject(COSName.NEXT);
+                if (chained != null) {
+                    pending.push(chained);
+                }
+            }
+        }
+        return actions;
     }
 
     /**

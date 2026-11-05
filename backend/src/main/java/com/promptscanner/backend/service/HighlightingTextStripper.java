@@ -36,6 +36,10 @@ public class HighlightingTextStripper extends PDFTextStripper {
 
     /** Fill alpha at or below this is invisible to a reader but still extractable. */
     private static final float TRANSPARENT_ALPHA = 0.05f;
+    /** Text below this size is unreadable at normal zoom. */
+    private static final float TINY_TEXT_PT = 3.0f;
+    /** Contiguous tiny characters needed to report; shorter is a footnote marker. */
+    private static final int MIN_TINY_RUN_CHARS = 5;
     /** Share of glyphs in a run that must be hidden before the run is reported. */
     private static final double HIDDEN_RUN_THRESHOLD = 0.8;
 
@@ -150,15 +154,12 @@ public class HighlightingTextStripper extends PDFTextStripper {
             isWhiteText = true;
         }
 
-        boolean hasTinyText = false;
+        List<List<TextPosition>> tinyRuns = tinyRuns(textPositions);
+        boolean hasTinyText = !tinyRuns.isEmpty();
         float minSizeFound = Float.MAX_VALUE;
-        for (TextPosition tp : textPositions) {
-            float size = tp.getFontSizeInPt();
-            if (size > 0 && size < 3.0f) {
-                hasTinyText = true;
-                if (size < minSizeFound) {
-                    minSizeFound = size;
-                }
+        for (List<TextPosition> run : tinyRuns) {
+            for (TextPosition tp : run) {
+                minSizeFound = Math.min(minSizeFound, tp.getFontSizeInPt());
             }
         }
 
@@ -181,7 +182,14 @@ public class HighlightingTextStripper extends PDFTextStripper {
         }
 
         if (!reasons.isEmpty()) {
-            String trimmedText = text.trim();
+            // When tiny text is the only mechanism it may share the line with
+            // ordinary text, so quote and highlight just the tiny part rather than
+            // presenting the readable words around it as hidden.
+            boolean tinyOnly = hasTinyText && reasons.size() == 1;
+            List<TextPosition> hiddenGlyphs = tinyOnly
+                    ? tinyRuns.stream().flatMap(List::stream).toList()
+                    : textPositions;
+            String trimmedText = tinyOnly ? textOf(tinyRuns) : text.trim();
             // Both lists are serialised into the scan response, so a document made of
             // hidden runs would otherwise amplify a small upload into a multi-megabyte
             // body -- expensive to build, and enough to hang the browser rendering it.
@@ -191,7 +199,7 @@ public class HighlightingTextStripper extends PDFTextStripper {
                         "Page " + getCurrentPageNo(),
                         truncate(trimmedText)));
 
-                addHighlight(computeBoundingBox(textPositions));
+                addHighlight(computeBoundingBox(hiddenGlyphs));
             }
         }
 
@@ -202,6 +210,66 @@ public class HighlightingTextStripper extends PDFTextStripper {
                 break;
             }
         }
+    }
+
+    /**
+     * Unbroken stretches of sub-3pt glyphs long enough to carry an instruction.
+     *
+     * Any single tiny glyph used to flag its whole line, so a footnote marker or a
+     * superscript reference made an ordinary sentence read as hidden text. A share
+     * of the line (the rule the other mechanisms use) would not do either: a tiny
+     * payload tacked onto a long visible line is a small share of it. Requiring a
+     * contiguous run of several characters separates the two. Whitespace glyphs
+     * neither count towards a run nor break it, since tiny words are still
+     * separated by spaces.
+     */
+    private static List<List<TextPosition>> tinyRuns(List<TextPosition> textPositions) {
+        List<List<TextPosition>> runs = new ArrayList<>();
+        List<TextPosition> current = new ArrayList<>();
+        int visible = 0;
+        for (TextPosition tp : textPositions) {
+            String unicode = tp.getUnicode();
+            if (unicode == null || unicode.isBlank()) {
+                continue;
+            }
+            float size = tp.getFontSizeInPt();
+            if (size > 0 && size < TINY_TEXT_PT) {
+                current.add(tp);
+                visible++;
+            } else {
+                if (visible >= MIN_TINY_RUN_CHARS) {
+                    runs.add(current);
+                }
+                current = new ArrayList<>();
+                visible = 0;
+            }
+        }
+        if (visible >= MIN_TINY_RUN_CHARS) {
+            runs.add(current);
+        }
+        return runs;
+    }
+
+    /** The text of the runs, with runs separated so they don't read as one word. */
+    private static String textOf(List<List<TextPosition>> runs) {
+        StringBuilder out = new StringBuilder();
+        for (List<TextPosition> run : runs) {
+            if (!out.isEmpty()) {
+                out.append(" … ");
+            }
+            TextPosition previous = null;
+            for (TextPosition tp : run) {
+                // Glyph positions carry no spaces of their own; restore a word
+                // break wherever there is a visible gap between glyphs.
+                if (previous != null && tp.getXDirAdj() - (previous.getXDirAdj() + previous.getWidthDirAdj())
+                        > previous.getWidthOfSpace() * 0.5f) {
+                    out.append(' ');
+                }
+                out.append(tp.getUnicode());
+                previous = tp;
+            }
+        }
+        return out.toString().trim();
     }
 
     /**
