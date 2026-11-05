@@ -2,11 +2,15 @@ package com.promptscanner.backend.service;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
+import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -121,5 +125,105 @@ class PdfScannerServiceTest {
 
         assertFalse(words.contains("you"));
         assertFalse(words.contains("dan"));
+    }
+
+    /** One page per entry, each carrying that many distinct images. */
+    private static PDDocument documentWithImages(int... imagesPerPage) throws IOException {
+        PDDocument doc = new PDDocument();
+        for (int count : imagesPerPage) {
+            PDPage page = new PDPage();
+            doc.addPage(page);
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                for (int i = 0; i < count; i++) {
+                    PDImageXObject image = LosslessFactory.createFromImage(
+                            doc, new BufferedImage(4, 4, BufferedImage.TYPE_INT_RGB));
+                    cs.drawImage(image, 10 + i * 10, 10, 8, 8);
+                }
+            }
+        }
+        return doc;
+    }
+
+    private void ocrWith(PdfScannerService.OcrEngine engine) {
+        ReflectionTestUtils.setField(service, "ocrEngine", engine);
+    }
+
+    @Test
+    void ocrOfEveryImageReportsNoLimitation() throws IOException {
+        ocrWith(image -> "image text");
+        try (PDDocument doc = documentWithImages(1, 1)) {
+            PdfScannerService.OcrResult result = service.runOcr(doc);
+
+            assertTrue(result.text().contains("image text"));
+            assertTrue(result.limitations().isEmpty());
+        }
+    }
+
+    @Test
+    void imagesPastThePageCapAreReportedNotSilentlySkipped() throws IOException {
+        // Regression: OCR stopped after page 5 with only a log line, so a payload in
+        // an image on page 6 came back "clean".
+        ocrWith(image -> "x");
+        try (PDDocument doc = documentWithImages(1, 1, 1, 1, 1, 1, 1)) {
+            List<String> limitations = service.runOcr(doc).limitations();
+
+            assertEquals(1, limitations.size());
+            assertTrue(limitations.get(0).contains("5 of 7 images"), limitations.get(0));
+        }
+    }
+
+    @Test
+    void imagesPastTheImageCapAreReported() throws IOException {
+        ocrWith(image -> "x");
+        try (PDDocument doc = documentWithImages(12)) {
+            List<String> limitations = service.runOcr(doc).limitations();
+
+            assertEquals(1, limitations.size());
+            assertTrue(limitations.get(0).contains("10 of 12 images"), limitations.get(0));
+        }
+    }
+
+    @Test
+    void missingTesseractIsReportedAndDoesNotFailTheScan() throws IOException {
+        // tess4j signals a missing native library with an Error, not an Exception
+        ocrWith(image -> { throw new UnsatisfiedLinkError("libtesseract not found"); });
+        try (PDDocument doc = documentWithImages(2)) {
+            PdfScannerService.OcrResult result = assertDoesNotThrow(() -> service.runOcr(doc));
+
+            assertEquals(1, result.limitations().size());
+            assertTrue(result.limitations().get(0).contains("OCR is unavailable"));
+            assertTrue(result.limitations().get(0).contains("2 of 2 images"), result.limitations().get(0));
+        }
+    }
+
+    @Test
+    void unreadableImagesAreReported() throws IOException {
+        int[] calls = {0};
+        ocrWith(image -> {
+            if (calls[0]++ == 0) {
+                throw new IllegalStateException("corrupt image");
+            }
+            return "ok";
+        });
+        try (PDDocument doc = documentWithImages(2)) {
+            PdfScannerService.OcrResult result = service.runOcr(doc);
+
+            assertTrue(result.text().contains("ok"));
+            assertEquals(List.of("1 of 2 images could not be read for OCR, so any text inside them was not examined."),
+                    result.limitations());
+        }
+    }
+
+    @Test
+    void ocrLimitationsReachTheScanResult() throws IOException {
+        ReflectionTestUtils.setField(service, "maxPages", 50);
+        ocrWith(image -> { throw new UnsatisfiedLinkError("libtesseract not found"); });
+        try (PDDocument doc = documentWithImages(1); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            doc.save(out);
+            PdfScannerService.PdfData data = service.processPdf(
+                    new MockMultipartFile("file", "x.pdf", "application/pdf", out.toByteArray()), Set.of());
+
+            assertTrue(data.limitations().stream().anyMatch(l -> l.contains("OCR is unavailable")));
+        }
     }
 }

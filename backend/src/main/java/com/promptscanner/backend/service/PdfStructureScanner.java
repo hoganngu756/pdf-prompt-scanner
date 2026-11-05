@@ -3,9 +3,12 @@ package com.promptscanner.backend.service;
 import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
+import org.apache.pdfbox.cos.COSObject;
+import org.apache.pdfbox.cos.COSString;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDDocumentInformation;
 import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.common.PDMetadata;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotation;
 import org.apache.pdfbox.pdmodel.interactive.form.PDAcroForm;
 import org.apache.pdfbox.pdmodel.interactive.form.PDField;
@@ -17,13 +20,19 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -44,49 +53,188 @@ public class PdfStructureScanner {
     private static final int MAX_FIELD_CHARS = 2000;
     private static final int MAX_ANNOTATIONS = 200;
     private static final int MAX_OUTLINE_ITEMS = 200;
+    private static final int MAX_METADATA_ENTRIES = 200;
+    private static final int MAX_XMP_BYTES = 512 * 1024;
+
+    /** Timestamps in D:YYYYMMDD form: never prose, so not worth the analysis budget. */
+    private static final Set<String> DATE_KEYS = Set.of("CreationDate", "ModDate");
+
+    /** RDF plumbing whose values are identifiers, not content. */
+    private static final Set<String> XMP_STRUCTURAL_ATTRIBUTES =
+            Set.of("rdf:about", "rdf:parseType", "xml:lang", "x:xmptk", "begin", "id");
+
+    private static final Pattern XMP_ATTRIBUTE =
+            Pattern.compile("\\s([\\w:.-]+)\\s*=\\s*(?:\"([^\"<]*)\"|'([^'<]*)')");
+    private static final Pattern XMP_TEXT = Pattern.compile(">([^<]+)<");
+    private static final Pattern XML_ENTITY = Pattern.compile("&(#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[a-z]{2,4});");
 
     /**
      * @param hiddenText  text recovered from non-page surfaces, for the heuristic
      *                    and AI engines to analyse
      * @param findings    active-content and hidden-surface findings to show the user
+     * @param limitations surfaces that were only partly read. Non-empty means the
+     *                    scan cannot vouch for the whole document.
      */
-    public record StructureData(String hiddenText, List<Finding> findings) {}
+    public record StructureData(String hiddenText, List<Finding> findings, List<String> limitations) {}
 
     public StructureData scan(PDDocument document) {
         StringBuilder recovered = new StringBuilder();
         List<Finding> findings = new ArrayList<>();
+        List<String> limitations = new ArrayList<>();
 
-        collectMetadata(document, recovered, findings);
+        Set<String> seenMetadataValues = new HashSet<>();
+        collectMetadata(document, recovered, findings, seenMetadataValues, limitations);
+        collectXmpMetadata(document, recovered, findings, seenMetadataValues, limitations);
         collectActiveContent(document, findings);
         collectAnnotations(document, recovered, findings);
-        collectOutline(document, recovered, findings);
+        collectOutline(document, recovered, findings, limitations);
         collectFormFieldValues(document, recovered, findings);
 
-        return new StructureData(recovered.toString(), findings);
+        return new StructureData(recovered.toString(), findings, limitations);
     }
 
-    private void collectMetadata(PDDocument document, StringBuilder recovered, List<Finding> findings) {
+    /**
+     * Reads every string in the Info dictionary, not just the six standard keys.
+     *
+     * Any key is legal there, and tools that hand metadata to an LLM typically dump
+     * the whole dictionary, so an injection under a custom key such as /Comments
+     * reached the model while this scanner never looked at it.
+     */
+    private void collectMetadata(PDDocument document, StringBuilder recovered, List<Finding> findings,
+                                 Set<String> seenValues, List<String> limitations) {
         try {
             PDDocumentInformation info = document.getDocumentInformation();
             if (info == null) {
                 return;
             }
-            appendField(recovered, findings, "Title", info.getTitle());
-            appendField(recovered, findings, "Author", info.getAuthor());
-            appendField(recovered, findings, "Subject", info.getSubject());
-            appendField(recovered, findings, "Keywords", info.getKeywords());
-            appendField(recovered, findings, "Creator", info.getCreator());
-            appendField(recovered, findings, "Producer", info.getProducer());
+            int seen = 0;
+            for (Map.Entry<COSName, COSBase> entry : info.getCOSObject().entrySet()) {
+                COSBase value = entry.getValue() instanceof COSObject ref ? ref.getObject() : entry.getValue();
+                String key = entry.getKey().getName();
+                if (!(value instanceof COSString string) || DATE_KEYS.contains(key)) {
+                    continue;
+                }
+                if (++seen > MAX_METADATA_ENTRIES) {
+                    limitations.add(String.format(
+                            "Document metadata was truncated: only the first %,d entries were analysed.",
+                            MAX_METADATA_ENTRIES));
+                    break;
+                }
+                appendField(recovered, findings, seenValues, key, string.getString());
+            }
         } catch (Exception e) {
             log.warn("Could not read document metadata: {}", e.getMessage());
         }
     }
 
-    private void appendField(StringBuilder recovered, List<Finding> findings, String label, String value) {
+    /**
+     * Reads the XMP metadata stream, the newer home for the same fields.
+     *
+     * XMP is XML from the uploaded file, so it is deliberately not handed to an XML
+     * parser: that is an XXE and entity-expansion surface for no gain. Element text
+     * and attribute values are pulled out with linear patterns instead, which also
+     * keeps working on a malformed packet a lenient consumer would still read.
+     */
+    private void collectXmpMetadata(PDDocument document, StringBuilder recovered, List<Finding> findings,
+                                    Set<String> seenValues, List<String> limitations) {
+        try {
+            PDMetadata metadata = document.getDocumentCatalog().getMetadata();
+            if (metadata == null) {
+                return;
+            }
+            byte[] bytes;
+            try (InputStream in = metadata.createInputStream()) {
+                // Read one byte past the cap so an oversized packet is detectable.
+                // The stream is decoded lazily, so this also bounds a decompression bomb.
+                bytes = in.readNBytes(MAX_XMP_BYTES + 1);
+            }
+            if (bytes.length > MAX_XMP_BYTES) {
+                limitations.add(String.format(
+                        "XMP metadata was truncated: only the first %,d bytes were analysed.", MAX_XMP_BYTES));
+                bytes = Arrays.copyOf(bytes, MAX_XMP_BYTES);
+            }
+            String xml = new String(bytes, StandardCharsets.UTF_8);
+
+            List<String> values = new ArrayList<>();
+            Matcher attributes = XMP_ATTRIBUTE.matcher(xml);
+            while (attributes.find()) {
+                String name = attributes.group(1);
+                if (!name.startsWith("xmlns") && !XMP_STRUCTURAL_ATTRIBUTES.contains(name)) {
+                    values.add(attributes.group(2) != null ? attributes.group(2) : attributes.group(3));
+                }
+            }
+            Matcher text = XMP_TEXT.matcher(xml);
+            while (text.find()) {
+                values.add(text.group(1));
+            }
+
+            int seen = 0;
+            for (String value : values) {
+                String decoded = decodeXmlEntities(value);
+                if (decoded.isBlank()) {
+                    continue;
+                }
+                if (++seen > MAX_METADATA_ENTRIES) {
+                    limitations.add(String.format(
+                            "XMP metadata was truncated: only the first %,d values were analysed.",
+                            MAX_METADATA_ENTRIES));
+                    break;
+                }
+                appendField(recovered, findings, seenValues, "XMP metadata", decoded);
+            }
+        } catch (Exception e) {
+            log.warn("Could not read XMP metadata: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Decodes the five predefined entities and numeric character references.
+     * Leaving "&#105;gnore" encoded would let a payload slip past every rule.
+     */
+    static String decodeXmlEntities(String value) {
+        if (value.indexOf('&') < 0) {
+            return value;
+        }
+        Matcher m = XML_ENTITY.matcher(value);
+        StringBuilder out = new StringBuilder(value.length());
+        while (m.find()) {
+            String entity = m.group(1);
+            String replacement = switch (entity) {
+                case "lt" -> "<";
+                case "gt" -> ">";
+                case "amp" -> "&";
+                case "quot" -> "\"";
+                case "apos" -> "'";
+                default -> {
+                    try {
+                        int codePoint = entity.startsWith("#x") || entity.startsWith("#X")
+                                ? Integer.parseInt(entity.substring(2), 16)
+                                : Integer.parseInt(entity.substring(1));
+                        yield Character.isValidCodePoint(codePoint)
+                                ? new String(Character.toChars(codePoint))
+                                : m.group();
+                    } catch (NumberFormatException e) {
+                        yield m.group();
+                    }
+                }
+            };
+            m.appendReplacement(out, Matcher.quoteReplacement(replacement));
+        }
+        m.appendTail(out);
+        return out.toString();
+    }
+
+    private void appendField(StringBuilder recovered, List<Finding> findings, Set<String> seenValues,
+                             String label, String value) {
         if (value == null || value.isBlank()) {
             return;
         }
         String trimmed = truncate(value.trim());
+        // XMP normally mirrors the Info dictionary; reporting both would double
+        // every finding and the text sent to the analysis layers.
+        if (!seenValues.add(trimmed)) {
+            return;
+        }
         recovered.append(label).append(": ").append(trimmed).append("\n");
         // Only surface metadata that reads like an instruction rather than a filename
         if (looksInstructional(trimmed)) {
@@ -231,8 +379,13 @@ public class PdfStructureScanner {
      * made to loop. The traversal is iterative (no recursion depth to exhaust) and
      * remembers every node it has visited, so a cycle ends the walk instead of
      * spinning until the item cap.
+     *
+     * Reaching the cap is recorded as a limitation, not just logged: otherwise a
+     * file could park its payload behind enough innocuous bookmarks and still be
+     * reported clean.
      */
-    private void collectOutline(PDDocument document, StringBuilder recovered, List<Finding> findings) {
+    private void collectOutline(PDDocument document, StringBuilder recovered, List<Finding> findings,
+                                List<String> limitations) {
         try {
             PDDocumentOutline outline = document.getDocumentCatalog().getDocumentOutline();
             if (outline == null) {
@@ -251,6 +404,8 @@ public class PdfStructureScanner {
                 }
                 if (++seen > MAX_OUTLINE_ITEMS) {
                     log.info("Stopping outline scan at {} bookmarks.", MAX_OUTLINE_ITEMS);
+                    limitations.add(String.format("Bookmarks were truncated: only the first %,d were analysed.",
+                            MAX_OUTLINE_ITEMS));
                     break;
                 }
                 // Sibling first so the child is popped next: document order.

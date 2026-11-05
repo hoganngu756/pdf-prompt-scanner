@@ -105,7 +105,7 @@ describe('scan limitations', () => {
     expect(coverage.state).toBe('warn');
     expect(coverage.note).toBe(truncated[0]);
     expect(overallVerdict(checks).state).toBe('warn');
-    expect(overallVerdict(checks).summary).toContain('too large to analyse in full');
+    expect(overallVerdict(checks).summary).toContain('could not be analysed');
   });
 
   it('still reports a detection, without counting coverage as a check', () => {

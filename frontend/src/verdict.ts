@@ -119,7 +119,7 @@ export function overallVerdict(checks: Check[]): Verdict {
     return {
       state: 'warn',
       headline: 'Inconclusive',
-      summary: 'Part of this document was too large to analyse in full, so it has not been fully examined.',
+      summary: 'Part of this document could not be analysed, so it has not been fully examined.',
     };
   }
 

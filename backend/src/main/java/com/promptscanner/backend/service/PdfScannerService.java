@@ -2,8 +2,10 @@ package com.promptscanner.backend.service;
 
 import com.promptscanner.backend.dto.Finding;
 import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDResources;
+import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -65,6 +67,8 @@ public class PdfScannerService {
     // Use ThreadLocal to cache Tesseract instances across requests safely
     private ThreadLocal<Tesseract> tesseractThreadLocal;
 
+    private OcrEngine ocrEngine;
+
     public PdfScannerService(PdfStructureScanner pdfStructureScanner, PdfPreviewRenderer previewRenderer) {
         this.pdfStructureScanner = pdfStructureScanner;
         this.previewRenderer = previewRenderer;
@@ -86,6 +90,7 @@ public class PdfScannerService {
             }
             return tesseract;
         });
+        ocrEngine = image -> tesseractThreadLocal.get().doOCR(image);
     }
 
     public record PdfData(
@@ -132,7 +137,11 @@ public class PdfScannerService {
                                 "Metadata and annotation text", limitations);
             }
 
-            String ocrText = runOcr(document);
+            limitations.addAll(structure.limitations());
+
+            OcrResult ocr = runOcr(document);
+            limitations.addAll(ocr.limitations());
+            String ocrText = ocr.text();
             if (!ocrText.isEmpty()) {
                 log.debug("Extracted OCR text length: {}", ocrText.length());
                 extractedText += "\n\n--- OCR EXTRACTED TEXT ---\n"
@@ -162,56 +171,93 @@ public class PdfScannerService {
         return text.substring(0, max) + "\n\n--- TEXT TRUNCATED AT SCAN LIMIT ---";
     }
 
-    /**
-     * OCR is best-effort. When the native Tesseract library is missing or fails
-     * to initialise, tess4j throws {@link ExceptionInInitializerError} — an Error,
-     * not an Exception — which sailed past the per-image catch below and failed
-     * the entire scan with a 500. A document containing any image was
-     * unscannable on a host without libtesseract. The text, structure and visual
-     * layers do not depend on OCR, so a failure here degrades the scan rather
-     * than ending it.
-     */
-    private String runOcr(PDDocument document) {
-        try {
-            return runOcrInternal(document);
-        } catch (Throwable t) {
-            log.warn("OCR unavailable, continuing without it: {}", t.toString());
-            return "";
-        }
+    /** Reads text from one image. A seam so tests don't depend on a native Tesseract. */
+    @FunctionalInterface
+    interface OcrEngine {
+        String read(BufferedImage image) throws Exception;
     }
 
-    private String runOcrInternal(PDDocument document) {
-        StringBuilder ocrText = new StringBuilder();
-        Tesseract tesseract = tesseractThreadLocal.get();
-        int imageCount = 0;
-        int pageLimit = Math.min(document.getNumberOfPages(), MAX_OCR_PAGES);
+    /** OCR output plus whatever it could not cover. */
+    record OcrResult(String text, List<String> limitations) {}
 
-        for (int i = 0; i < pageLimit && imageCount < MAX_OCR_IMAGES; i++) {
-            PDPage page = document.getPage(i);
-            org.apache.pdfbox.pdmodel.PDResources resources = page.getResources();
-            if (resources == null) {
-                continue;
-            }
-            for (org.apache.pdfbox.cos.COSName name : resources.getXObjectNames()) {
-                if (imageCount >= MAX_OCR_IMAGES) {
-                    log.info("Reached maximum OCR image limit ({}). Skipping remaining images.", MAX_OCR_IMAGES);
-                    break;
+    /**
+     * OCR is best-effort, but its gaps are reported, not swallowed. Every image in
+     * the document is counted, including those past the page and image caps, so a
+     * document with a payload in an image on page 6, or on a host with no
+     * Tesseract, is inconclusive rather than clean.
+     *
+     * When the native Tesseract library is missing or fails to initialise, tess4j
+     * throws a LinkageError (ExceptionInInitializerError, UnsatisfiedLinkError) --
+     * an Error, not an Exception. It is caught here so a document with images is
+     * still scanned by the layers that don't depend on OCR, instead of failing
+     * with a 500.
+     */
+    OcrResult runOcr(PDDocument document) {
+        StringBuilder ocrText = new StringBuilder();
+        int totalImages = 0;
+        int attempted = 0;
+        int failed = 0;
+        boolean unavailable = false;
+
+        try {
+            for (int i = 0; i < document.getNumberOfPages(); i++) {
+                PDResources resources = document.getPage(i).getResources();
+                if (resources == null) {
+                    continue;
                 }
-                try {
-                    if (!resources.isImageXObject(name)) {
+                for (COSName name : resources.getXObjectNames()) {
+                    try {
+                        if (!resources.isImageXObject(name)) {
+                            continue;
+                        }
+                    } catch (Exception e) {
                         continue;
                     }
-                    imageCount++;
-                    var image = (org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject) resources.getXObject(name);
-                    BufferedImage bim = image.getImage();
-                    ocrText.append(tesseract.doOCR(bim)).append("\n");
-                } catch (Exception e) {
-                    // One unreadable image should not abandon the remaining ones
-                    log.warn("OCR error on image {}: {}", name.getName(), e.getMessage());
+                    totalImages++;
+                    if (unavailable || i >= MAX_OCR_PAGES || attempted >= MAX_OCR_IMAGES) {
+                        continue;
+                    }
+                    attempted++;
+                    try {
+                        var image = (PDImageXObject) resources.getXObject(name);
+                        ocrText.append(ocrEngine.read(image.getImage())).append("\n");
+                    } catch (LinkageError e) {
+                        log.warn("OCR unavailable, continuing without it: {}", e.toString());
+                        unavailable = true;
+                        attempted--;
+                    } catch (Exception e) {
+                        // One unreadable image should not abandon the remaining ones
+                        log.warn("OCR error on image {}: {}", name.getName(), e.getMessage());
+                        failed++;
+                    }
                 }
             }
+        } catch (Exception e) {
+            log.warn("Could not enumerate images for OCR: {}", e.getMessage());
+            return new OcrResult(ocrText.toString(), List.of(
+                    "Images could not be fully enumerated, so text inside them may not have been examined."));
         }
-        return ocrText.toString();
+
+        List<String> limitations = new ArrayList<>();
+        if (unavailable) {
+            limitations.add(String.format(
+                    "OCR is unavailable on this server, so text inside %,d of %,d images was not examined.",
+                    totalImages - (attempted - failed), totalImages));
+        } else {
+            int skipped = totalImages - attempted;
+            if (skipped > 0) {
+                log.info("OCR limited to {} of {} images.", attempted, totalImages);
+                limitations.add(String.format(
+                        "OCR covered only %,d of %,d images (the first %,d images on the first %,d pages).",
+                        attempted, totalImages, MAX_OCR_IMAGES, MAX_OCR_PAGES));
+            }
+            if (failed > 0) {
+                limitations.add(String.format(
+                        "%,d of %,d images could not be read for OCR, so any text inside them was not examined.",
+                        failed, totalImages));
+            }
+        }
+        return new OcrResult(ocrText.toString(), limitations);
     }
 
     /** Derives the words worth highlighting in previews from the active literal rules. */
