@@ -1,0 +1,19 @@
+# The image is built from this directory, and the Dockerfile copies src/ whole.
+# Without this, a local `docker build` bakes the gitignored Gemini key in
+# src/main/resources/application-secrets.properties into the jar, and anyone
+# who pulls the image can read it. Production builds from git, which never
+# has the file, so this only bites local builds -- which is why it is easy to miss.
+**/application-secrets.properties
+**/.env
+**/.env.*
+
+# Build output and local scratch: never needed, and they bloat the context.
+target/
+*.pdf
+HELP.md
+
+# Editors and OS noise.
+.idea/
+.vscode/
+*.iml
+.DS_Store

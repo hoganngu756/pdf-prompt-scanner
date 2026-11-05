@@ -3,8 +3,15 @@ package com.promptscanner.backend.service;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.PDFormContentStream;
 import org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
+import org.apache.pdfbox.pdmodel.graphics.image.PDInlineImage;
+import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
+import org.apache.pdfbox.pdmodel.PDResources;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.cos.COSDictionary;
+import org.apache.pdfbox.cos.COSName;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -13,6 +20,8 @@ import org.springframework.web.multipart.MultipartFile;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -224,6 +233,134 @@ class PdfScannerServiceTest {
                     new MockMultipartFile("file", "x.pdf", "application/pdf", out.toByteArray()), Set.of());
 
             assertTrue(data.limitations().stream().anyMatch(l -> l.contains("OCR is unavailable")));
+        }
+    }
+
+    private static PDImageXObject smallImage(PDDocument doc) throws IOException {
+        return LosslessFactory.createFromImage(doc, new BufferedImage(4, 4, BufferedImage.TYPE_INT_RGB));
+    }
+
+    private static int[] countingOcr(PdfScannerServiceTest test) {
+        int[] calls = {0};
+        test.ocrWith(image -> {
+            calls[0]++;
+            return "found";
+        });
+        return calls;
+    }
+
+    @Test
+    void ocrFindsImagesInsideFormXObjects() throws IOException {
+        // Regression: only the page's own resources were listed, so an image drawn
+        // through a form XObject was never counted or read
+        int[] calls = countingOcr(this);
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage();
+            doc.addPage(page);
+            PDFormXObject inner = new PDFormXObject(doc);
+            inner.setResources(new PDResources());
+            inner.setBBox(new PDRectangle(100, 100));
+            try (PDFormContentStream cs = new PDFormContentStream(inner)) {
+                cs.drawImage(smallImage(doc), 0, 0, 10, 10);
+            }
+            PDFormXObject outer = new PDFormXObject(doc);
+            outer.setResources(new PDResources());
+            outer.setBBox(new PDRectangle(100, 100));
+            try (PDFormContentStream cs = new PDFormContentStream(outer)) {
+                cs.drawForm(inner);
+            }
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                cs.drawForm(outer);
+            }
+
+            PdfScannerService.OcrResult result = service.runOcr(doc);
+
+            assertEquals(1, calls[0]);
+            assertTrue(result.text().contains("found"));
+            assertTrue(result.limitations().isEmpty());
+        }
+    }
+
+    @Test
+    void ocrFindsInlineImages() throws IOException {
+        // An inline image (BI ... ID ... EI) has no resource entry at all
+        int[] calls = countingOcr(this);
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage();
+            doc.addPage(page);
+            COSDictionary params = new COSDictionary();
+            params.setInt(COSName.W, 4);
+            params.setInt(COSName.H, 4);
+            params.setInt(COSName.BPC, 8);
+            params.setItem(COSName.CS, COSName.G);
+            PDInlineImage inline = new PDInlineImage(params, new byte[16], page.getResources());
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                cs.drawImage(inline, 10, 10, 10, 10);
+            }
+
+            service.runOcr(doc);
+
+            assertEquals(1, calls[0]);
+        }
+    }
+
+    @Test
+    void ocrReadsImagesListedButNeverDrawn() throws IOException {
+        // Invisible to a reader, but image extractors read resources directly
+        int[] calls = countingOcr(this);
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage();
+            page.setResources(new PDResources());
+            doc.addPage(page);
+            page.getResources().add(smallImage(doc));
+
+            service.runOcr(doc);
+
+            assertEquals(1, calls[0]);
+        }
+    }
+
+    @Test
+    void anImageRepeatedOnEveryPageIsReadOnce() throws IOException {
+        // A logo on 7 pages is one image, not 7 -- it must not trip the page cap
+        int[] calls = countingOcr(this);
+        try (PDDocument doc = new PDDocument()) {
+            PDImageXObject logo = smallImage(doc);
+            for (int i = 0; i < 7; i++) {
+                PDPage page = new PDPage();
+                doc.addPage(page);
+                try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                    cs.drawImage(logo, 10, 10, 10, 10);
+                }
+            }
+
+            PdfScannerService.OcrResult result = service.runOcr(doc);
+
+            assertEquals(1, calls[0]);
+            assertTrue(result.limitations().isEmpty(), result.limitations().toString());
+        }
+    }
+
+    @Test
+    void aSelfReferencingFormTerminates() throws IOException {
+        // Forms come from the file and can be made to draw themselves
+        countingOcr(this);
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage();
+            doc.addPage(page);
+            PDFormXObject form = new PDFormXObject(doc);
+            PDResources resources = new PDResources();
+            form.setResources(resources);
+            form.setBBox(new PDRectangle(100, 100));
+            COSName self = resources.add(form);
+            try (OutputStream out = form.getContentStream().createOutputStream()) {
+                out.write(("/" + self.getName() + " Do").getBytes());
+            }
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                cs.drawForm(form);
+            }
+
+            assertTimeoutPreemptively(Duration.ofSeconds(10), () -> service.runOcr(doc));
         }
     }
 }

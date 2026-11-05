@@ -2,10 +2,9 @@ package com.promptscanner.backend.service;
 
 import com.promptscanner.backend.dto.Finding;
 import org.apache.pdfbox.Loader;
-import org.apache.pdfbox.cos.COSName;
+import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.pdmodel.PDResources;
-import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
+import org.apache.pdfbox.pdmodel.graphics.image.PDImage;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -18,6 +17,8 @@ import jakarta.annotation.PostConstruct;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -182,9 +183,10 @@ public class PdfScannerService {
 
     /**
      * OCR is best-effort, but its gaps are reported, not swallowed. Every image in
-     * the document is counted, including those past the page and image caps, so a
-     * document with a payload in an image on page 6, or on a host with no
-     * Tesseract, is inconclusive rather than clean.
+     * the document is counted -- including those nested in forms, inline in the
+     * content stream, or listed but never drawn (see PageImageFinder), and those
+     * past the page and image caps -- so a document with a payload in an image on
+     * page 6, or on a host with no Tesseract, is inconclusive rather than clean.
      *
      * When the native Tesseract library is missing or fails to initialise, tess4j
      * throws a LinkageError (ExceptionInInitializerError, UnsatisfiedLinkError) --
@@ -193,50 +195,28 @@ public class PdfScannerService {
      * with a 500.
      */
     OcrResult runOcr(PDDocument document) {
-        StringBuilder ocrText = new StringBuilder();
-        int totalImages = 0;
-        int attempted = 0;
-        int failed = 0;
-        boolean unavailable = false;
+        OcrPass pass = new OcrPass();
+        // Shared across pages, so an image repeated on every page is read once
+        Set<COSBase> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        int incompletePages = 0;
 
-        try {
-            for (int i = 0; i < document.getNumberOfPages(); i++) {
-                PDResources resources = document.getPage(i).getResources();
-                if (resources == null) {
-                    continue;
-                }
-                for (COSName name : resources.getXObjectNames()) {
-                    try {
-                        if (!resources.isImageXObject(name)) {
-                            continue;
-                        }
-                    } catch (Exception e) {
-                        continue;
-                    }
-                    totalImages++;
-                    if (unavailable || i >= MAX_OCR_PAGES || attempted >= MAX_OCR_IMAGES) {
-                        continue;
-                    }
-                    attempted++;
-                    try {
-                        var image = (PDImageXObject) resources.getXObject(name);
-                        ocrText.append(ocrEngine.read(image.getImage())).append("\n");
-                    } catch (LinkageError e) {
-                        log.warn("OCR unavailable, continuing without it: {}", e.toString());
-                        unavailable = true;
-                        attempted--;
-                    } catch (Exception e) {
-                        // One unreadable image should not abandon the remaining ones
-                        log.warn("OCR error on image {}: {}", name.getName(), e.getMessage());
-                        failed++;
-                    }
-                }
+        for (int i = 0; i < document.getNumberOfPages(); i++) {
+            boolean eligiblePage = i < MAX_OCR_PAGES;
+            try {
+                PageImageFinder.forEachImage(document.getPage(i), seen, image -> pass.offer(image, eligiblePage));
+            } catch (Exception e) {
+                // Images found before the failure were still offered; the rest of
+                // the page is unknown, which the report has to say.
+                log.warn("Could not fully enumerate images on page {}: {}", i + 1, e.getMessage());
+                incompletePages++;
             }
-        } catch (Exception e) {
-            log.warn("Could not enumerate images for OCR: {}", e.getMessage());
-            return new OcrResult(ocrText.toString(), List.of(
-                    "Images could not be fully enumerated, so text inside them may not have been examined."));
         }
+
+        int totalImages = pass.total;
+        int attempted = pass.attempted;
+        int failed = pass.failed;
+        boolean unavailable = pass.unavailable;
+        String ocrText = pass.text.toString();
 
         List<String> limitations = new ArrayList<>();
         if (unavailable) {
@@ -257,7 +237,40 @@ public class PdfScannerService {
                         failed, totalImages));
             }
         }
-        return new OcrResult(ocrText.toString(), limitations);
+        if (incompletePages > 0) {
+            limitations.add(String.format(
+                    "Images on %,d %s could not be fully enumerated, so text inside them may not have been examined.",
+                    incompletePages, incompletePages == 1 ? "page" : "pages"));
+        }
+        return new OcrResult(ocrText, limitations);
+    }
+
+    /** Running totals for one document's OCR, fed one image at a time. */
+    private final class OcrPass {
+        final StringBuilder text = new StringBuilder();
+        int total;
+        int attempted;
+        int failed;
+        boolean unavailable;
+
+        void offer(PDImage image, boolean eligiblePage) {
+            total++;
+            if (unavailable || !eligiblePage || attempted >= MAX_OCR_IMAGES) {
+                return;
+            }
+            attempted++;
+            try {
+                text.append(ocrEngine.read(image.getImage())).append("\n");
+            } catch (LinkageError e) {
+                log.warn("OCR unavailable, continuing without it: {}", e.toString());
+                unavailable = true;
+                attempted--;
+            } catch (Exception e) {
+                // One unreadable image should not abandon the remaining ones
+                log.warn("OCR error on an image: {}", e.getMessage());
+                failed++;
+            }
+        }
     }
 
     /** Derives the words worth highlighting in previews from the active literal rules. */
