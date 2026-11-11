@@ -4,6 +4,7 @@ import com.promptscanner.backend.dto.Finding;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImage;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.springframework.stereotype.Service;
@@ -114,7 +115,7 @@ public class PdfScannerService {
      *                       supplied by the caller from the active rule set
      */
     public PdfData processPdf(MultipartFile file, Set<String> highlightWords) throws IOException {
-        try (PDDocument document = Loader.loadPDF(file.getBytes())) {
+        try (PDDocument document = load(file)) {
             if (document.getNumberOfPages() > maxPages) {
                 throw new IllegalArgumentException("PDF exceeds maximum allowed page count of " + maxPages
                         + " pages (found " + document.getNumberOfPages() + ").");
@@ -153,6 +154,31 @@ public class PdfScannerService {
 
             return new PdfData(extractedText, previews.imagesBase64(), visualFindings,
                     structure.findings(), previews.pageNumbers(), limitations);
+        }
+    }
+
+    /**
+     * Parses the upload, turning a file PDFBox cannot open into a client error.
+     *
+     * A file that is not a PDF, is damaged beyond repair, or needs a password is
+     * a problem with the upload, not with the server. Left alone these surfaced
+     * as 500s with a stack trace logged at ERROR, which told the user nothing
+     * and let anyone fill the error log by uploading junk.
+     *
+     * Only the load is wrapped: an IOException later in the scan still means
+     * something went wrong on our side and should stay a 500.
+     */
+    private static PDDocument load(MultipartFile file) throws IOException {
+        byte[] bytes = file.getBytes();
+        try {
+            return Loader.loadPDF(bytes);
+        } catch (InvalidPasswordException e) {
+            throw new IllegalArgumentException(
+                    "This PDF is password-protected. Remove the password and upload it again.");
+        } catch (IOException e) {
+            log.info("Rejected an upload PDFBox could not parse: {}", e.getMessage());
+            throw new IllegalArgumentException(
+                    "This file could not be read as a PDF. It may be damaged or not a PDF at all.");
         }
     }
 

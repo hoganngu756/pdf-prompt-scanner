@@ -49,6 +49,52 @@ class ScanControllerTest {
                         not(containsString("ignore all previous instructions"))));
     }
 
+    /**
+     * A bad upload is the client's problem, so it must come back as a 400 with a
+     * message the user can act on -- not a 500 with a stack trace in our logs.
+     */
+    @Test
+    void scan_RejectsAFileThatIsNotAPdfWith400() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "notes.pdf", "application/pdf", "just some text, not a PDF".getBytes());
+
+        mockMvc.perform(multipart("/api/scan").file(file))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error", containsString("could not be read as a PDF")));
+    }
+
+    @Test
+    void scan_RejectsATruncatedPdfWith400() throws Exception {
+        byte[] pdf = new ClassPathResource("pdf/safe.pdf").getContentAsByteArray();
+        byte[] truncated = java.util.Arrays.copyOf(pdf, 20);
+        MockMultipartFile file = new MockMultipartFile("file", "cut.pdf", "application/pdf", truncated);
+
+        mockMvc.perform(multipart("/api/scan").file(file))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error", containsString("could not be read as a PDF")));
+    }
+
+    @Test
+    void scan_RejectsAPasswordProtectedPdfWith400() throws Exception {
+        byte[] encrypted;
+        try (org.apache.pdfbox.pdmodel.PDDocument doc = new org.apache.pdfbox.pdmodel.PDDocument();
+             java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()) {
+            doc.addPage(new org.apache.pdfbox.pdmodel.PDPage());
+            org.apache.pdfbox.pdmodel.encryption.StandardProtectionPolicy policy =
+                    new org.apache.pdfbox.pdmodel.encryption.StandardProtectionPolicy(
+                            "owner", "secret", new org.apache.pdfbox.pdmodel.encryption.AccessPermission());
+            policy.setEncryptionKeyLength(128);
+            doc.protect(policy);
+            doc.save(out);
+            encrypted = out.toByteArray();
+        }
+        MockMultipartFile file = new MockMultipartFile("file", "locked.pdf", "application/pdf", encrypted);
+
+        mockMvc.perform(multipart("/api/scan").file(file))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error", containsString("password-protected")));
+    }
+
     @Test
     void scanResponse_OmitsEmptyFindingFieldsRatherThanSendingNulls() throws Exception {
         byte[] pdf = new ClassPathResource("pdf/safe.pdf").getContentAsByteArray();

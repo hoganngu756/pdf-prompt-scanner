@@ -10,19 +10,19 @@ A PDF can contain text a person never sees, such as white text, microscopic font
 
 ## How it works
 
-You upload a PDF. The backend extracts everything an AI could read from it: page text, metadata, annotations, bookmarks, form fields, and text inside images (via OCR). It then runs four checks:
+You upload a PDF. The backend extracts everything an AI could read from it: page text, metadata (including custom fields and XMP), annotations and comments, bookmarks, filled-in form fields, attached text files, and text inside images via OCR, including images nested inside other drawings. It then runs four checks:
 
 | Check | What it looks for | Can be turned off |
 |---|---|---|
-| **Visual obfuscation** | Text a human can't see: invisible, transparent, white or under 3pt | No |
-| **Document structure** | Instructions in metadata, annotations, bookmarks or form fields, plus active content such as embedded JavaScript | No |
+| **Visual obfuscation** | Text a human can't see: invisible, transparent, white or under 3pt, whether it fills a whole line or is tucked onto the end of a visible one | No |
+| **Document structure** | Instructions in metadata, annotations, bookmarks, form fields or attachments, plus active content such as embedded JavaScript, launch actions and hidden or `javascript:` links | No |
 | **Heuristic rules** | Known injection phrases from [`heuristic-rules.yml`](backend/src/main/resources/heuristic-rules.yml), even when disguised with spacing (`b.y.p.a.s.s`) or lookalike letters (Cyrillic `і` for Latin `i`) | Yes |
 | **AI analysis** | New or reworded attacks that no fixed rule covers, using Gemini | Yes |
 
 The result is one of three verdicts:
 - **Injection detected:** at least one check flagged the file.
 - **No injection found:** every check passed.
-- **Inconclusive:** a check couldn't run, or part of the file was too large to analyse in full.
+- **Inconclusive:** nothing was flagged, but part of the file couldn't be analysed: a check couldn't run, a section was too large, an attachment wasn't plain text, or an image couldn't be read. The scanner never reports a file as clean on the strength of the part it managed to read.
 
 The server stores nothing. Scan history lives only in your browser.
 
@@ -38,9 +38,10 @@ The benchmark in [`benchmark/`](benchmark) runs the scanner against generated PD
 
 **Known gaps:**
 - Rewording defeats fixed rules; that is what the optional AI check is for.
-- The visual check doesn't yet catch text placed off the page or hidden behind a shape.
-- A few metadata locations are not read yet.
-- Ordinary links count as a structure finding, so they can trigger a false alarm.
+- The visual check doesn't yet catch near-white text, text the same colour as its background, text placed off the page, or text hidden behind a shape.
+- For the same reason, white text on a dark background can be flagged as hidden when it shares a line with ordinary text.
+- Metadata that isn't plain text, and XMP attached to individual pages or images, is not read yet.
+- Attachments are read only if they are plain text; any other attachment makes the result Inconclusive.
 
 ## Tech stack
 
@@ -68,7 +69,13 @@ npm run dev
 
 To try it, click any of the ten sample PDFs on the page.
 
-**Optional OCR:** reading text inside images needs Tesseract (`brew install tesseract` on macOS). Without it every other check still runs. The Docker image includes it.
+**Optional OCR:** reading text inside images needs Tesseract (`brew install tesseract` on macOS). Without it every other check still runs, but a file containing images comes back Inconclusive because the text inside them went unchecked. The Docker image includes it.
+
+On Apple Silicon, Homebrew installs Tesseract where Java doesn't look, so OCR fails until you point Java at it:
+
+```bash
+./mvnw spring-boot:run -Dspring-boot.run.jvmArguments="-Djna.library.path=/opt/homebrew/lib"
+```
 
 ## Configuration
 
@@ -82,6 +89,7 @@ To try it, click any of the ten sample PDFs on the page.
 **Limits:**
 - 10 MB and 50 pages per file
 - 10 scans per minute per IP address
+- Password-protected PDFs are rejected; remove the password first
 
 ## Tests
 
