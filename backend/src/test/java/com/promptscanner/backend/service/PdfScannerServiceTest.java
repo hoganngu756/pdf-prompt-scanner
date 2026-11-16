@@ -236,6 +236,45 @@ class PdfScannerServiceTest {
         }
     }
 
+    /**
+     * An image that declares huge dimensions over a stream of almost no data,
+     * which is all a real one needs: a single colour deflates about 1000:1.
+     */
+    static PDImageXObject oversizedImage(PDDocument doc) throws IOException {
+        org.apache.pdfbox.cos.COSStream stream = doc.getDocument().createCOSStream();
+        try (OutputStream out = stream.createOutputStream(COSName.FLATE_DECODE)) {
+            out.write(new byte[16]);
+        }
+        stream.setItem(COSName.TYPE, COSName.XOBJECT);
+        stream.setItem(COSName.SUBTYPE, COSName.IMAGE);
+        stream.setInt(COSName.WIDTH, 12_000);
+        stream.setInt(COSName.HEIGHT, 12_000);
+        stream.setInt(COSName.BITS_PER_COMPONENT, 8);
+        stream.setItem(COSName.COLORSPACE, COSName.DEVICERGB);
+        return new PDImageXObject(new org.apache.pdfbox.pdmodel.common.PDStream(stream), null);
+    }
+
+    /** Decoding a 12000x12000 image is an OutOfMemoryError on a small heap, from a 420 KB upload. */
+    @Test
+    void anOversizedImageIsNeverDecodedAndIsReported() throws IOException {
+        int[] calls = countingOcr(this);
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage();
+            doc.addPage(page);
+            try (PDPageContentStream cs = new PDPageContentStream(doc, page)) {
+                cs.drawImage(oversizedImage(doc), 10, 10, 50, 50);
+                cs.drawImage(smallImage(doc), 100, 10, 50, 50);
+            }
+
+            PdfScannerService.OcrResult result = service.runOcr(doc);
+
+            assertEquals(1, calls[0], "only the image within the budget should reach OCR");
+            assertEquals(1, result.limitations().size(), result.limitations().toString());
+            assertTrue(result.limitations().get(0).contains("1 of 2 images were too large"),
+                    result.limitations().toString());
+        }
+    }
+
     private static PDImageXObject smallImage(PDDocument doc) throws IOException {
         return LosslessFactory.createFromImage(doc, new BufferedImage(4, 4, BufferedImage.TYPE_INT_RGB));
     }

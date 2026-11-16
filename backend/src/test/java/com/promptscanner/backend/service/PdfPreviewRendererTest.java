@@ -39,6 +39,24 @@ class PdfPreviewRendererTest {
         return highlights;
     }
 
+    /**
+     * The image declares 144 megapixels over 16 bytes of data. Decoding it throws
+     * (the data runs out), so a preview coming back at all shows it was skipped.
+     */
+    @Test
+    void anOversizedImageIsLeftOutOfThePreviewInsteadOfDecoded() throws IOException {
+        try (PDDocument doc = documentOf(1, PDRectangle.LETTER)) {
+            try (org.apache.pdfbox.pdmodel.PDPageContentStream cs =
+                         new org.apache.pdfbox.pdmodel.PDPageContentStream(doc, doc.getPage(0))) {
+                cs.drawImage(PdfScannerServiceTest.oversizedImage(doc), 10, 10, 50, 50);
+            }
+
+            PdfPreviewRenderer.Previews previews = renderer.render(doc, Map.of());
+
+            assertEquals(List.of(1), previews.pageNumbers());
+        }
+    }
+
     @Test
     void rendersAtMostFivePagesHoweverManyAreFlagged() throws IOException {
         try (PDDocument doc = documentOf(12, PDRectangle.LETTER)) {

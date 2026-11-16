@@ -241,6 +241,7 @@ public class PdfScannerService {
         int totalImages = pass.total;
         int attempted = pass.attempted;
         int failed = pass.failed;
+        int oversized = pass.oversized;
         boolean unavailable = pass.unavailable;
         String ocrText = pass.text.toString();
 
@@ -250,7 +251,7 @@ public class PdfScannerService {
                     "OCR is unavailable on this server, so text inside %,d of %,d images was not examined.",
                     totalImages - (attempted - failed), totalImages));
         } else {
-            int skipped = totalImages - attempted;
+            int skipped = totalImages - oversized - attempted;
             if (skipped > 0) {
                 log.info("OCR limited to {} of {} images.", attempted, totalImages);
                 limitations.add(String.format(
@@ -262,6 +263,11 @@ public class PdfScannerService {
                         "%,d of %,d images could not be read for OCR, so any text inside them was not examined.",
                         failed, totalImages));
             }
+        }
+        if (oversized > 0 && !unavailable) {
+            limitations.add(String.format(
+                    "%,d of %,d images were too large to read (over %,d megapixels), so any text inside them was not examined.",
+                    oversized, totalImages, ImageBudget.MAX_IMAGE_PIXELS / 1_000_000));
         }
         if (incompletePages > 0) {
             limitations.add(String.format(
@@ -277,10 +283,17 @@ public class PdfScannerService {
         int total;
         int attempted;
         int failed;
+        int oversized;
         boolean unavailable;
 
         void offer(PDImage image, boolean eligiblePage) {
             total++;
+            // Checked before decoding, and before the caps: an image this size is
+            // never read, wherever it sits, and the report should say why.
+            if (ImageBudget.exceeds(image)) {
+                oversized++;
+                return;
+            }
             if (unavailable || !eligiblePage || attempted >= MAX_OCR_IMAGES) {
                 return;
             }

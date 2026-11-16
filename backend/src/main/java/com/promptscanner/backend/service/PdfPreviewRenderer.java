@@ -6,7 +6,10 @@ import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.graphics.blend.BlendMode;
 import org.apache.pdfbox.pdmodel.graphics.state.PDExtendedGraphicsState;
+import org.apache.pdfbox.pdmodel.graphics.image.PDImage;
 import org.apache.pdfbox.rendering.PDFRenderer;
+import org.apache.pdfbox.rendering.PageDrawer;
+import org.apache.pdfbox.rendering.PageDrawerParameters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -100,7 +103,7 @@ public class PdfPreviewRenderer {
 
         List<String> images = new ArrayList<>();
         List<Integer> pageNumbers = new ArrayList<>();
-        PDFRenderer pdfRenderer = new PDFRenderer(document);
+        PDFRenderer pdfRenderer = new BoundedRenderer(document);
 
         for (int pageIndex : pagesToRender) {
             if (pageIndex < 0 || pageIndex >= document.getNumberOfPages()) {
@@ -128,6 +131,35 @@ public class PdfPreviewRenderer {
         }
 
         return new Previews(images, pageNumbers);
+    }
+
+    /**
+     * A renderer that leaves oversized images undrawn.
+     *
+     * The page bitmap is bounded by {@link #MAX_PREVIEW_PIXELS}, but drawing an
+     * image decodes it at its own declared size first, whatever area it ends up
+     * covering on the page. Skipping it costs a blank patch in a preview; decoding
+     * it cost the whole request an OutOfMemoryError.
+     */
+    private static final class BoundedRenderer extends PDFRenderer {
+        BoundedRenderer(PDDocument document) {
+            super(document);
+        }
+
+        @Override
+        protected PageDrawer createPageDrawer(PageDrawerParameters parameters) throws IOException {
+            return new PageDrawer(parameters) {
+                @Override
+                public void drawImage(PDImage image) throws IOException {
+                    if (ImageBudget.exceeds(image)) {
+                        log.warn("Leaving a {}x{} image out of the preview: over the pixel budget.",
+                                image.getWidth(), image.getHeight());
+                        return;
+                    }
+                    super.drawImage(image);
+                }
+            };
+        }
     }
 
     private void drawHighlights(PDDocument document, PDPage page, List<PDRectangle> rects) throws IOException {
