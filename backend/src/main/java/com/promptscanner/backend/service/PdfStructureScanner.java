@@ -75,7 +75,6 @@ public class PdfStructureScanner {
     /** Annotation keys that carry text a parser can extract, in reporting order. */
     private static final List<COSName> ANNOTATION_TEXT_KEYS =
             List.of(COSName.CONTENTS, COSName.T, COSName.getPDFName("Subj"), COSName.RC);
-    private static final Pattern MARKUP_TAG = Pattern.compile("<[^>]*>");
 
     /** Action types that run code or move data in or out, with what each does. */
     private static final Map<String, String> CODE_ACTIONS = Map.of(
@@ -102,7 +101,6 @@ public class PdfStructureScanner {
 
     private static final Pattern XMP_ATTRIBUTE =
             Pattern.compile("\\s([\\w:.-]+)\\s*=\\s*(?:\"([^\"<]*)\"|'([^'<]*)')");
-    private static final Pattern XMP_TEXT = Pattern.compile(">([^<]+)<");
     private static final Pattern XML_ENTITY = Pattern.compile("&(#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[a-z]{2,4});");
 
     /**
@@ -202,10 +200,7 @@ public class PdfStructureScanner {
                     values.add(attributes.group(2) != null ? attributes.group(2) : attributes.group(3));
                 }
             }
-            Matcher text = XMP_TEXT.matcher(xml);
-            while (text.find()) {
-                values.add(text.group(1));
-            }
+            values.addAll(xmpElementTexts(xml));
 
             int seen = 0;
             for (String value : values) {
@@ -224,6 +219,59 @@ public class PdfStructureScanner {
         } catch (Exception e) {
             log.warn("Could not read XMP metadata: {}", e.getMessage());
         }
+    }
+
+    /**
+     * The text between a '>' and the next '<': element content, markup excluded.
+     *
+     * Hand-scanned rather than matched with {@code >([^<]+)<}. That pattern is
+     * quadratic on a run of '>' with no '<' after it -- every '>' is a new start
+     * that scans to the end of the input before failing -- so a 512 KB packet of
+     * '>' pinned a core for minutes. A possessive quantifier does not help: it
+     * removes the backtracking, not the rescan from each start. Here a missing
+     * '<' ends the search outright, so the scan is linear in the input.
+     */
+    static List<String> xmpElementTexts(String xml) {
+        List<String> texts = new ArrayList<>();
+        int open = xml.indexOf('>');
+        while (open >= 0) {
+            int close = xml.indexOf('<', open + 1);
+            if (close < 0) {
+                break;
+            }
+            if (close > open + 1) {
+                texts.add(xml.substring(open + 1, close));
+                open = xml.indexOf('>', close + 1);
+            } else {
+                open = xml.indexOf('>', open + 1);
+            }
+        }
+        return texts;
+    }
+
+    /**
+     * Replaces each {@code <...>} tag with a space. Linear for the same reason as
+     * {@link #xmpElementTexts}: the regex {@code <[^>]*>} is quadratic on a run of
+     * '<' with no '>' after it, and an annotation's /RC string is not bounded by
+     * anything but the upload size (a megabyte of '<' deflates to under 1 KB).
+     */
+    static String stripMarkupTags(String value) {
+        int open = value.indexOf('<');
+        if (open < 0) {
+            return value;
+        }
+        StringBuilder out = new StringBuilder(value.length());
+        int from = 0;
+        while (open >= 0) {
+            int close = value.indexOf('>', open + 1);
+            if (close < 0) {
+                break;
+            }
+            out.append(value, from, open).append(' ');
+            from = close + 1;
+            open = value.indexOf('<', from);
+        }
+        return out.append(value, from, value.length()).toString();
     }
 
     /**
@@ -428,8 +476,7 @@ public class PdfStructureScanner {
             if (key.equals(COSName.RC)) {
                 // Rich text is XHTML; the markup is not content. Same linear,
                 // parser-free handling as XMP, for the same reasons.
-                value = decodeXmlEntities(MARKUP_TAG.matcher(value).replaceAll(" "))
-                        .replaceAll("\\s+", " ");
+                value = decodeXmlEntities(stripMarkupTags(value)).replaceAll("\\s+", " ");
             }
             if (value.isBlank()) {
                 continue;

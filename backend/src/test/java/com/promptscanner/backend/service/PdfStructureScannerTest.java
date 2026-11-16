@@ -686,6 +686,52 @@ class PdfStructureScannerTest {
     }
 
     @Test
+    void stripMarkupTags_MatchesTheRegexItReplaced() {
+        for (String input : List.of("plain", "<p>a</p>", "a<b>c", "<<a>>", "a<b", "a>b<c>d", "<>", "x<a\nb>y", "")) {
+            assertEquals(input.replaceAll("<[^>]*>", " "), PdfStructureScanner.stripMarkupTags(input), input);
+        }
+    }
+
+    @Test
+    void xmpElementTexts_MatchesTheRegexItReplaced() {
+        for (String input : List.of("<a>one</a><b>two</b>", "a>b>c<d", "><", ">x", "x<", ">>a<<b>c<", "")) {
+            List<String> expected = new ArrayList<>();
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile(">([^<]+)<").matcher(input);
+            while (m.find()) {
+                expected.add(m.group(1));
+            }
+            assertEquals(expected, PdfStructureScanner.xmpElementTexts(input), input);
+        }
+    }
+
+    /** A run of '<' with no '>' made the old tag-stripping regex quadratic: minutes of CPU from a 1 KB upload. */
+    @Test
+    void scan_UnclosedRichTextTagsDoNotStallTheScan() throws IOException {
+        try (PDDocument doc = new PDDocument()) {
+            PDPage page = new PDPage();
+            doc.addPage(page);
+            PDAnnotationText annotation = new PDAnnotationText();
+            annotation.getCOSObject().setString(COSName.RC, "<".repeat(1_000_000));
+            page.setAnnotations(List.of(annotation));
+
+            assertTimeoutPreemptively(Duration.ofSeconds(5), () -> scanner.scan(doc));
+        }
+    }
+
+    /** The same shape in XMP: a packet of '>' with no '<' to end an element. */
+    @Test
+    void scan_UnterminatedXmpTextDoesNotStallTheScan() throws IOException {
+        try (PDDocument doc = new PDDocument()) {
+            doc.addPage(new PDPage());
+            PDMetadata metadata = new PDMetadata(doc);
+            metadata.importXMPMetadata(">".repeat(500 * 1024).getBytes(StandardCharsets.UTF_8));
+            doc.getDocumentCatalog().setMetadata(metadata);
+
+            assertTimeoutPreemptively(Duration.ofSeconds(5), () -> scanner.scan(doc));
+        }
+    }
+
+    @Test
     void attachmentText_DetectsTextByContentNotName() {
         assertEquals("hello", PdfStructureScanner.attachmentText("hello".getBytes(StandardCharsets.UTF_8)));
         byte[] utf16 = {(byte) 0xFE, (byte) 0xFF, 0, 'h', 0, 'i'};
