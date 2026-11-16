@@ -55,6 +55,22 @@ class IpRateLimitingInterceptorTest {
         assertFalse(scan("1.2.3.4"));
     }
 
+    /**
+     * Spring routes all of these to the scan handler, so all of them must spend
+     * the scan budget. Comparing the raw URI to "/api/scan" let each one through
+     * on the read budget instead.
+     */
+    @Test
+    void pathVariantsOfTheScanEndpointShareTheScanBudget() throws Exception {
+        for (int i = 0; i < SCAN_LIMIT; i++) {
+            assertTrue(request("POST", "/api/scan;x=" + i, "1.2.3.4"));
+        }
+        assertFalse(request("POST", "/api/scan;x=9", "1.2.3.4"));
+        assertFalse(request("POST", "/api/scan;jsessionid=abc", "1.2.3.4"));
+        assertFalse(request("POST", "/api/scan/", "1.2.3.4"));
+        assertFalse(scan("1.2.3.4"));
+    }
+
     @Test
     void budgetsAreSeparatePerClient() throws Exception {
         for (int i = 0; i < SCAN_LIMIT; i++) {

@@ -62,7 +62,13 @@ public class IpRateLimitingInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        boolean isScan = "/api/scan".equals(request.getRequestURI()) && "POST".equalsIgnoreCase(request.getMethod());
+        // Decided by method alone, never by comparing the request path. Spring
+        // routes "/api/scan;x=1" to the scan handler, but its raw URI is not
+        // equal to "/api/scan", so a path comparison put those requests in the
+        // roomy read bucket: 120 scans a minute instead of 10. Scanning is the
+        // only POST this API has, and any POST added later gets the tight
+        // budget until someone decides otherwise, which is the safe default.
+        boolean isScan = "POST".equalsIgnoreCase(request.getMethod());
         int limit = isScan ? rateLimitRpm : apiRateLimitRpm;
 
         String ip = getClientIp(request);
